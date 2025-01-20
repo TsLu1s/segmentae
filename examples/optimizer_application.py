@@ -87,9 +87,9 @@ basicAutoencoder.fit(X_train, X_train, epochs=50, batch_size=None, validation_sp
 ### SegmentAE Optimizer Implementation
 
 optimizer = SegmentAE_Optimizer(autoencoder_models = [ensembleAutoencoder, basicAutoencoder],
-                                n_clusters_list = [1, 2, 3, 4],
+                                n_clusters_list = [1, 2, 3],
                                 cluster_models = ["KMeans", "MiniBatchKMeans", "GMM"],  # Options | KMeans, MiniBatchKMeans, GMM, Agglomerative
-                                threshold_ratios = [1, 1.5, 2, 3, 4],
+                                threshold_ratios = [1, 1.5, 2, 4],
                                 performance_metric = 'Accuracy')
 sg = optimizer.optimize(X_train, X_test, y_test)
 
