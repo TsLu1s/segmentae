@@ -1,8 +1,9 @@
 pandas>=1.2.0
 numpy>=1.19.5
-atlantic>=1.1.67
-mlimputer>=1.0.67
+atlantic==1.1.67
 tensorflow>=2.10.0
 ucimlrepo>=0.0.7
 scipy>=1.11.4
+pydantic==2.0.0
+matplotlib==3.9.3
 

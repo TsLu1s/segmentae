@@ -1,220 +1,170 @@
-from sklearn.cluster import (KMeans,
-                             MiniBatchKMeans,
-                             AgglomerativeClustering)
-from sklearn.mixture import GaussianMixture
+import pandas as pd
 
-class KMeans_Clustering:
-    def __init__(self, 
-                 n_clusters=3, 
-                 random_state=0, 
-                 max_iter=300):
-        """
-        KMeans_Clustering is a class for performing K-Means clustering.
+from typing import List, Dict
 
-        Parameters:
-        - n_clusters (int): The number of clusters to form.
-        - random_state (int): Random seed for initializing centroids.
-        - max_iter (int): Maximum number of iterations to run.
+from segmentae.core.constants import ClusterModel
+from segmentae.core.base import AbstractClusterModel
+from segmentae.core.exceptions import ValidationError, ModelNotFittedError
+from segmentae.clusters.registry import ClusterRegistry
+from segmentae.clusters.models import ClusteringConfig
 
-        Attributes:
-        - n_clusters (int): The number of clusters to form.
-        - random_state (int): Random seed for initializing centroids.
-        - max_iter (int): Maximum number of iterations to run.
-        - model (KMeans): K-Means clustering model.
-        """
-        self.n_clusters = n_clusters
-        self.random_state = random_state
-        self.max_iter = max_iter
-        self.model = KMeans(
-            n_clusters = self.n_clusters,
-            random_state = self.random_state,
-            max_iter = self.max_iter,
-        )
-
-    def fit(self, X):
-        """
-        Fit the KMeans model to the data.
-
-        Parameters:
-        - X (array-like): The input data.
-
-        Returns:
-        - None
-        """
-        self.__init__(self.n_clusters, self.random_state, self.max_iter)
-        self.model.fit(X)
-
-    def predict(self, X):
-        """
-        Predict cluster labels for the given data.
-
-        Parameters:
-        - X (array-like): The input data.
-
-        Returns:
-        - labels (array): Predicted cluster labels.
-        """
-        return self.model.predict(X)
-
-class MiniBatchKMeans_Clustering:
-    def __init__(self, 
-                 n_clusters=3, 
-                 random_state=0, 
-                 max_iter=150):
-        """
-        MiniBatchKMeans_Clustering is a class for performing Mini Batch K-Means clustering.
-
-        Parameters:
-        - n_clusters (int): The number of clusters to form.
-        - random_state (int): Random seed for initializing centroids.
-        - max_iter (int): Maximum number of iterations to run.
-
-        Attributes:
-        - n_clusters (int): The number of clusters to form.
-        - random_state (int): Random seed for initializing centroids.
-        - max_iter (int): Maximum number of iterations to run.
-        - model (MiniBatchKMeans): Mini Batch K-Means clustering model.
-        """
-        self.n_clusters = n_clusters
-        self.random_state = random_state
-        self.max_iter = max_iter
-        self.model = MiniBatchKMeans(
-            n_clusters = self.n_clusters,
-            random_state = self.random_state,
-            max_iter = self.max_iter,
-        )
-
-    def fit(self, X):
-        """
-        Fit the MiniBatchKMeans model to the data.
-
-        Parameters:
-        - X (array-like): The input data.
-
-        Returns:
-        - None
-        """
-        self.__init__(self.n_clusters, self.random_state, self.max_iter)
-        self.model.fit(X)
-
-    def predict(self, X):
-        """
-        Predict cluster labels for the given data.
-
-        Parameters:
-        - X (array-like): The input data.
-
-        Returns:
-        - labels (array): Predicted cluster labels.
-        """
-        return self.model.predict(X)   
+class Clustering:
+    """
+    Main clustering orchestrator for SegmentAE.
     
-class GaussianMixture_Clustering:
-    def __init__(self, 
-                 init_params='k-means++',
-                 n_components=3,
-                 max_iter=150,
-                 covariance_type='tied'):
+    This class manages multiple clustering algorithms, handling fitting
+    and prediction across different clustering approaches.
+    
+    Attributes:
+        cluster_model: List of clustering algorithm names
+        n_clusters: Number of clusters to form
+        random_state: Random seed for reproducibility
+        covariance_type: Covariance type for GMM clustering
+    """
+    
+    def __init__(self,
+                 cluster_model: List[str] = ['KMeans'],
+                 n_clusters: int = 3,
+                 random_state: int = 0,
+                 covariance_type: str = "full"):
         """
-        GaussianMixture_Clustering is a class for performing Gaussian Mixture Model clustering.
-
-        Parameters:
-        - init_params (str): Method for initialization of the means and the precisions. {'kmeans', 'k-means++', 'random', 'random_from_data'}
-        - n_components (int): Number of mixture components.
-        - max_iter (int): Maximum number of EM iterations.
-        - covariance_type (str): Type of covariance parameters to use. {'full', 'tied', 'diag', 'spherical'}
-
-        Attributes:
-        - init_params (str): Method for initialization of the means and the precisions. {'kmeans', 'k-means++', 'random', 'random_from_data'}
-        - n_components (int): Number of mixture components.
-        - max_iter (int): Maximum number of EM iterations.
-        - covariance_type (str): Type of covariance parameters to use. {'full', 'tied', 'diag', 'spherical'}
-        - model (GaussianMixture): Gaussian Mixture Model clustering model.
+        Initialize clustering pipeline.
         """
-        self.init_params = init_params
-        self.n_components = n_components
-        self.max_iter = max_iter
-        self.covariance_type = covariance_type
-        self.model = GaussianMixture(
-            n_components = self.n_components,
-            max_iter = self.max_iter,
-            covariance_type = self.covariance_type,
+        # Validate and store configuration
+        self.config = ClusteringConfig(
+            cluster_models=cluster_model,
+            n_clusters=n_clusters,
+            random_state=random_state,
+            covariance_type=covariance_type
         )
-
-    def fit(self, X):
-        """
-        Fit the GaussianMixture model to the data.
-
-        Parameters:
-        - X (array-like): The input data.
-
-        Returns:
-        - None
-        """
-        self.__init__(self.init_params, 
-                      self.n_components,
-                      self.max_iter,
-                      self.covariance_type)
-        self.model.fit(X)
-
-    def predict(self, X):
-        """
-        Predict cluster labels for the given data.
-
-        Parameters:
-        - X (array-like): The input data.
-
-        Returns:
-        - labels (array): Predicted cluster labels.
-        """
-        return self.model.predict(X) 
-
-class Agglomerative_Clustering:
-    def __init__(self, 
-                 n_clusters=3, 
-                 linkage='ward', 
-                 distance_threshold=None):
-        """
-        Agglomerative_Clustering is a class for performing Agglomerative Clustering.
-
-        Parameters:
-        - n_clusters (int): The number of clusters to find.
-        - linkage (str): The linkage criterion to use.
-        - distance_threshold (float): The linkage distance threshold above which, clusters will not be merged.
-
-        Attributes:
-        - n_clusters (int): The number of clusters to find.
-        - linkage (str): The linkage criterion to use.
-        - distance_threshold (float): The linkage distance threshold above which, clusters will not be merged.
-        - model (AgglomerativeClustering): Agglomerative Clustering model.
-        """
+        
+        # Store for backward compatibility
+        self.cluster_model = cluster_model
         self.n_clusters = n_clusters
-        self.linkage = linkage
-        self.distance_threshold = distance_threshold
-
-    def fit(self, X):
+        self.random_state = random_state
+        self.covariance_type = covariance_type
+        
+        # Internal state
+        self._fitted_models: Dict[str, AbstractClusterModel] = {}
+        self._is_fitted: bool = False
+    
+    def clustering_fit(self, X: pd.DataFrame) -> 'Clustering':
         """
-        Fit the AgglomerativeClustering model to the data.
-
-        Parameters:
-        - X (array-like): The input data.
-
-        Returns:
-        - None
+        Fit all specified clustering models to data.
+        
+        This method creates and fits each specified clustering algorithm
+        to the provided data, storing the fitted models for later prediction.
         """
-        self.model = AgglomerativeClustering(n_clusters=self.n_clusters,
-                                             linkage=self.linkage,
-                                             distance_threshold=self.distance_threshold)
-        self.model.fit(X)
-
-    def predict(self, X):
+        self._validate_input(X, "Training data")
+        
+        # Fit each specified clustering model
+        for model_type in self.config.cluster_models:
+            model_instance = self._create_model(model_type)
+            model_instance.fit(X)
+            self._fitted_models[model_type.value] = model_instance
+        
+        self._is_fitted = True
+        return self
+    
+    def cluster_prediction(self, X: pd.DataFrame) -> pd.DataFrame:
         """
-        Predict cluster labels for the given data.
-
-        Parameters:
-        - X (array-like): The input data.
-
-        Returns:
-        - labels (array): Predicted cluster labels.
+        Predict cluster assignments for all fitted models.
         """
-        return self.model.fit_predict(X) #.labels_  
+        self._validate_fitted()
+        self._validate_input(X, "Prediction data")
+        
+        results = pd.DataFrame()
+        
+        for model_name, model in self._fitted_models.items():
+            predictions = model.predict(X)
+            results[model_name] = predictions
+        
+        return results
+    
+    # Private methods
+    def _create_model(self, model_type: ClusterModel) -> AbstractClusterModel:
+        """
+        Create a clustering model instance with appropriate parameters.
+        """
+        # Base parameters for all models
+        kwargs = {
+            'n_clusters': self.config.n_clusters,
+            'random_state': self.config.random_state
+        }
+        
+        # Special handling for GMM (uses n_components instead of n_clusters)
+        if model_type == ClusterModel.GMM:
+            kwargs = {
+                'n_components': self.config.n_clusters,
+                'covariance_type': self.config.covariance_type
+            }
+        
+        # Remove n_clusters for Agglomerative if using distance_threshold
+        if model_type == ClusterModel.AGGLOMERATIVE:
+            kwargs = {'n_clusters': self.config.n_clusters}
+        
+        # MiniBatchKMeans uses different default max_iter
+        if model_type == ClusterModel.MINIBATCH_KMEANS:
+            kwargs['max_iter'] = 150
+        
+        return ClusterRegistry.create(model_type, **kwargs)
+    
+    def _validate_input(self, X: pd.DataFrame, context: str = "Input") -> None:
+        """
+        Validate input DataFrame.
+        """
+        if not isinstance(X, pd.DataFrame):
+            raise ValidationError(
+                f"{context} must be a pandas DataFrame, got {type(X).__name__}",
+                suggestion="Convert your data to DataFrame using pd.DataFrame()"
+            )
+        
+        if X.empty:
+            raise ValidationError(
+                f"{context} DataFrame is empty",
+                suggestion="Ensure your dataset contains data"
+            )
+    
+    def _validate_fitted(self) -> None:
+        """
+        Check if clustering is fitted.
+        """
+        if not self._is_fitted:
+            raise ModelNotFittedError(
+                component="Clustering",
+                message="Clustering must be fitted before prediction. "
+                        "Call clustering_fit(X) method first."
+            )
+    
+    # Properties for accessing fitted models
+    @property
+    def fitted_models(self) -> Dict[str, AbstractClusterModel]:
+        """Get dictionary of fitted clustering models."""
+        return self._fitted_models.copy()
+    
+    @property
+    def is_fitted(self) -> bool:
+        """Check if clustering pipeline is fitted."""
+        return self._is_fitted
+    
+    @property
+    def clustering_dict(self) -> Dict[str, AbstractClusterModel]:
+        """Get dictionary of fitted models (backward compatibility)."""
+        return self._fitted_models.copy()
+    
+    @property
+    def cmodel(self):
+        """Get the last fitted model (backward compatibility)."""
+        if not self._fitted_models:
+            return None
+        return list(self._fitted_models.values())[-1]
+    
+    def __repr__(self) -> str:
+        """String representation of Clustering."""
+        models_str = ", ".join([m.value for m in self.config.cluster_models])
+        return (
+            f"Clustering("
+            f"models=[{models_str}], "
+            f"n_clusters={self.config.n_clusters}, "
+            f"fitted={self._is_fitted})"
+        )

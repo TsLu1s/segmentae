@@ -1,88 +1,119 @@
+import numpy as np
 import pandas as pd
-from sklearn.metrics import (accuracy_score, 
-                             precision_score, 
-                             f1_score, 
-                             recall_score,
-                             mean_absolute_error,
-                             mean_squared_error,
-                             r2_score,
-                             max_error)
 
-def metrics_classification(y_true, y_pred):
+from typing import Union
+
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    f1_score,
+    recall_score,
+    mean_absolute_error,
+    mean_squared_error,
+    root_mean_squared_error,
+    r2_score,
+    max_error
+)
+
+from segmentae.core.exceptions import ValidationError
+
+def metrics_classification(
+    y_true: Union[pd.Series, np.ndarray],
+    y_pred: Union[pd.Series, np.ndarray]
+) -> pd.DataFrame:
     """
-    Calculate various classification model evaluation metrics.
-
-    Parameters:
-    y_true : array-like of shape (n_samples,)
-        True labels.
-    y_pred : array-like of shape (n_samples,)
-        Predicted labels.
+    Calculate classification evaluation metrics.
 
     Returns:
-    pandas.DataFrame
-        DataFrame containing accuracy, precision, recall, and F1 score metrics.
+        DataFrame containing accuracy, precision, recall, and F1 score metrics
     """
-    # Calculate accuracy
+    # Validate inputs
+    _validate_classification_inputs(y_true, y_pred)
+    
+    # Calculate metrics with zero_division handling
     accuracy = accuracy_score(y_true, y_pred)
+    precision = precision_score(y_true, y_pred, zero_division=0)
+    recall = recall_score(y_true, y_pred, zero_division=0)
+    f1 = f1_score(y_true, y_pred, zero_division=0)
     
-    # Calculate precision
-    precision = precision_score(y_true, y_pred)
+    # Create metrics dictionary
+    metrics = {
+        'Accuracy': accuracy,
+        'Precision': precision,
+        'Recall': recall,
+        'F1 Score': f1
+    }
     
-    # Calculate recall
-    recall = recall_score(y_true, y_pred)
-    
-    # Calculate f1
-    f1 = f1_score(y_true, y_pred)
-    
-    # Create a dictionary to store the metrics
-    metrics = {'Accuracy': accuracy,
-               'Precision': precision,
-               'Recall': recall,
-               'F1 Score': f1}
-    
-    # Convert metrics dictionary to DataFrame
-    metrics = pd.DataFrame(metrics, index=[0])
-    
-    return metrics
+    # Convert to DataFrame
+    return pd.DataFrame(metrics, index=[0])
 
-def metrics_regression(y_true, y_pred):
+
+def metrics_regression(
+    y_true: Union[pd.Series, np.ndarray],
+    y_pred: Union[pd.Series, np.ndarray]
+) -> pd.DataFrame:
     """
-    Calculate various regression model evaluation metrics.
-
-    Parameters:
-    y_true : array-like of shape (n_samples,)
-        True target values.
-    y_pred : array-like of shape (n_samples,)
-        Predicted target values.
+    Calculate regression evaluation metrics.
 
     Returns:
-    pandas.DataFrame
-        DataFrame containing Mean Absolute Error, Mean Squared Error, 
-        Root Mean Squared Error, and R-squared metrics.
+        DataFrame containing MAE, MSE, RMSE, R², and Max Error metrics
     """
-    # Calculate Mean Absolute Error (MAE)
+    # Validate inputs
+    _validate_regression_inputs(y_true, y_pred)
+    
+    # Calculate metrics
     mae = mean_absolute_error(y_true, y_pred)
-    
-    # Calculate Mean Squared Error (MSE)
     mse = mean_squared_error(y_true, y_pred)
-    
-    # Calculate Root Mean Squared Error (RMSE)
-    rmse = mean_squared_error(y_true, y_pred, squared=False)
-    
-    # Calculate R-squared
+    rmse = root_mean_squared_error(y_true, y_pred, squared=False)
     r2 = r2_score(y_true, y_pred)
-    
-    # Calculate Max Error
     maxerror = max_error(y_true, y_pred)
     
-    # Create a dictionary to store the metrics
-    metrics = {'Mean Absolute Error': mae,
-               'Mean Squared Error': mse,
-               'Root Mean Squared Error': rmse,
-               'R-squared': r2,
-               'Max Error': maxerror}
+    # Create metrics dictionary
+    metrics = {
+        'Mean Absolute Error': mae,
+        'Mean Squared Error': mse,
+        'Root Mean Squared Error': rmse,
+        'R-squared': r2,
+        'Max Error': maxerror
+    }
     
-    # Convert metrics dictionary to DataFrame
-    metrics = pd.DataFrame(metrics, index=[0])
+    # Convert to DataFrame
+    return pd.DataFrame(metrics, index=[0])
+
+
+def _validate_classification_inputs(
+    y_true: Union[pd.Series, np.ndarray],
+    y_pred: Union[pd.Series, np.ndarray]
+) -> None:
+    """Validate inputs for classification metrics."""
+    if len(y_true) != len(y_pred):
+        raise ValidationError(
+            f"Length mismatch: y_true has {len(y_true)} samples, "
+            f"y_pred has {len(y_pred)} samples",
+            suggestion="Ensure both arrays have the same number of samples"
+        )
     
-    return metrics
+    if len(y_true) == 0:
+        raise ValidationError(
+            "Empty arrays provided",
+            suggestion="Provide non-empty arrays with predictions"
+        )
+
+
+def _validate_regression_inputs(
+    y_true: Union[pd.Series, np.ndarray],
+    y_pred: Union[pd.Series, np.ndarray]
+) -> None:
+    """Validate inputs for regression metrics."""
+    if len(y_true) != len(y_pred):
+        raise ValidationError(
+            f"Length mismatch: y_true has {len(y_true)} samples, "
+            f"y_pred has {len(y_pred)} samples",
+            suggestion="Ensure both arrays have the same number of samples"
+        )
+    
+    if len(y_true) == 0:
+        raise ValidationError(
+            "Empty arrays provided",
+            suggestion="Provide non-empty arrays with predictions"
+        )

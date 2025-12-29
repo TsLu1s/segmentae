@@ -6,12 +6,12 @@ long_description = (this_directory / "README.md").read_text()
 
 setuptools.setup(
     name="segmentae",
-    version="0.9.0", 
+    version="1.5.10", 
     description="SegmentAE: A Python Library for Anomaly Detection Optimization",
     long_description=long_description,      
     long_description_content_type="text/markdown",
     url="https://github.com/TsLu1s/SegmentAE",
-    author="Luís Santos",
+    author="Luís Fernando da Silva Santos",
     author_email="luisf_ssantos@hotmail.com",
     license="MIT",
     classifiers=[
@@ -30,7 +30,6 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
 
-        "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
     ],

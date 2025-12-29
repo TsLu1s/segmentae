@@ -1,160 +1,198 @@
 import pandas as pd
+
+from typing import Optional, Tuple
+
 from sklearn.model_selection import train_test_split
-from ucimlrepo import fetch_ucirepo 
-from typing import Optional
+from ucimlrepo import fetch_ucirepo
 
-def load_dataset(dataset_selection : str = 'network_intrusions',
-                 split_ratio : float = 0.8,
-                 random_state : Optional[int] = 5):       
+def load_dataset(
+    dataset_selection: str = 'htru2_dataset',
+    split_ratio: float = 0.8,
+    random_state: Optional[int] = 5
+) -> Tuple[pd.DataFrame, pd.DataFrame, str]:
     """
-    Load and preprocess datasets for anomaly detection machine learning tasks.
-
-    Parameters:
-        dataset_selection (str): Name of the dataset to load. Defaults to 'injection_quality'.
-        split_ratio (float): Ratio of the dataset to use for training. Defaults to 0.8.
-        random_state (Optional[int]): Seed for random number generation. Defaults to 5.
-
-    Returns:
-        train (DataFrame): Training dataset.
-        test (DataFrame): Testing dataset.
-        target (str): Name of the target variable. (used for validation)
+    Load and preprocess datasets for anomaly detection tasks.
+    
+    Provides access to several benchmark anomaly detection datasets including
+    credit card defaults, shuttle data, and pulsar data.
     """
     
     # Handle different dataset selections
     if dataset_selection == "default_credit_card":
-        # Source : https://archive.ics.uci.edu/dataset/350/default+of+credit+card+clients
-        
-        # fetch dataset 
-        info = fetch_ucirepo(id=350)
-          
-        # Concatenate features and targets
-        data = pd.concat([info.data.features ,info.data.targets ],axis=1)
-        target, sr = 'Y', 0.75
-        
-        # Cast target values to integer
-        data[target] = data[target].astype(int)
-        
-        # Separate normal and fraud instances
-        normal, fraud = data[data[target] == 0], data[data[target] == 1]
-        
-        # Split normal instances into training and testing sets
-        train, test = train_test_split(normal, train_size=split_ratio, random_state=random_state)
-        
-        # Combine testing set with fraud instances and shuffle
-        test = pd.concat([test,fraud])
-        test = test.sample(frac=1, random_state=42)
-        
-    elif dataset_selection == "network_intrusions":
-        # Source : https://kdd.ics.uci.edu/databases/kddcup99/kddcup99.html
-        
-        # URL for the KDD Cup 1999 dataset
-        url = 'http://kdd.ics.uci.edu/databases/kddcup99/kddcup.data_10_percent.gz'
-
-        # Define feature names based on the dataset documentation
-        column_names = [
-            'duration', 'protocol_type', 'service', 'flag', 'src_bytes', 'dst_bytes',
-            'land', 'wrong_fragment', 'urgent', 'hot', 'num_failed_logins', 'logged_in',
-            'num_compromised', 'root_shell', 'su_attempted', 'num_root', 'num_file_creations',
-            'num_shells', 'num_access_files', 'num_outbound_cmds', 'is_host_login', 'is_guest_login',
-            'count', 'srv_count', 'serror_rate', 'srv_serror_rate', 'rerror_rate', 'srv_rerror_rate',
-            'same_srv_rate', 'diff_srv_rate', 'srv_diff_host_rate', 'dst_host_count', 'dst_host_srv_count',
-            'dst_host_same_srv_rate', 'dst_host_diff_srv_rate', 'dst_host_same_src_port_rate',
-            'dst_host_srv_diff_host_rate', 'dst_host_serror_rate', 'dst_host_srv_serror_rate',
-            'dst_host_rerror_rate', 'dst_host_srv_rerror_rate', 'label'
-        ]
-        
-        # Read the dataset into a pandas DataFrame
-        data = pd.read_csv(url, compression='gzip', header=None, names=column_names)
-
-        # Adjust target labels to binary
-        data.label = data.label.apply(lambda x: 0 if x == 'normal.' else 1)
-        
-        # Define proportions for sampling
-        proportions = {
-            0: 0.5,
-            1: 0.10
-        }
-
-        target, sr = 'label', 0.75
-        
-        # Drop columns with unique or single unique values, except for the target column
-        data = data.drop(columns=[col for col in data.columns 
-                               if (data[col].nunique() == len(data) or data[col].nunique() == 1)
-                                                                             and col != target])
-        
-        # Sample instances based on defined proportions
-        data = pd.concat([
-            data[data[target] == label].sample(frac=proportion)
-            for label, proportion in proportions.items()
-        ]).reset_index(drop=True)
-        
-        # Separate normal and intrusion instances
-        normal, intrusions = data[data[target] == 0], data[data[target] == 1]
-        
-        # Split normal instances into training and testing sets
-        train, test = train_test_split(normal, train_size=split_ratio, random_state=random_state)
-        
-        # Combine testing set with intrusion instances and shuffle
-        test = pd.concat([test,intrusions])
-        test = test.sample(frac=1, random_state=42)
+        return _load_credit_card_dataset(split_ratio, random_state)
     
     elif dataset_selection == "shuttle_148":
-        # Source : https://archive.ics.uci.edu/dataset/148/statlog+shuttle
-        
-        # fetch dataset 
-        info = fetch_ucirepo(id=148) 
-        
-        # Concatenate features and targets
-        data = pd.concat([info.data.features.reset_index(drop=True),
-                          info.data.targets.reset_index(drop=True) ],axis=1)
-        
-        # Adjust target values to binary
-        target, sr = 'class', 0.75
-        data[target] = data[target].replace({1: 0, 2: 1, 3: 1, 4: 1, 5: 1, 6:1, 7:1})
-        data[target] = data[target].astype(int)
-        
-        # Separate normal and fraud instances
-        normal, fraud = data[data[target] == 0], data[data[target] == 1]
-        
-        # Split normal instances into training and testing sets
-        train, test = train_test_split(normal, train_size=split_ratio, random_state=random_state)
-        
-        # Combine testing set with fraud instances and shuffle
-        test = pd.concat([test,fraud])
-        test = test.sample(frac=1, random_state=42)
+        return _load_shuttle_dataset(split_ratio, random_state)
     
     elif dataset_selection == "htru2_dataset":
-        # Source : https://archive.ics.uci.edu/dataset/372/htru2
-        
-        # fetch dataset 
-        info = fetch_ucirepo(id=372) 
-        
-        # Concatenate features and targets
-        data = pd.concat([info.data.features.reset_index(drop=True),
-                          info.data.targets.reset_index(drop=True) ],axis=1)
-        target, sr ='class', 0.9
-        
-        # Cast target values to integer
-        data[target] = data[target].astype(int)
-        
-        # Separate normal and fraud instances
-        normal, fraud = data[data[target] == 0], data[data[target] == 1]
-        
-        # Split normal instances into training and testing sets
-        train, test = train_test_split(normal, train_size=split_ratio, random_state=random_state)
-        
-        # Combine testing set with fraud instances and shuffle
-        test = pd.concat([test,fraud])
-        test = test.sample(frac=1, random_state=42)
-        
-    # Reset index for consistency
-    train, test = train.reset_index(drop=True), test.reset_index(drop=True)
+        return _load_htru2_dataset(split_ratio, random_state)
     
-    # Print information about the dataset
-    print({**{"Train Length": len(train),
-              "Test Length": len(test),
-              "Suggested Split_Ratio": sr},
-           **{"Anomalies [1]" if key == 1 else "Normal [0]": value for key, value in test[target].value_counts().to_dict().items()}})
+    else:
+        raise ValueError(
+            f"Unknown dataset: '{dataset_selection}'. "
+            f"Available options:  'default_credit_card', 'shuttle_148', 'htru2_dataset'"
+        )
+
+def _load_credit_card_dataset(
+    split_ratio: float,
+    random_state: Optional[int]
+) -> Tuple[pd.DataFrame, pd.DataFrame, str]:
+    """Load default of credit card clients dataset."""
+    # Source: https://archive.ics.uci.edu/dataset/350/default+of+credit+card+clients
+    
+    """
+    This research aimed at the case of customers' default payments in Taiwan and compares the predictive accuracy of probability of default among six data mining methods.
+    """
+
+    # Fetch dataset
+    info = fetch_ucirepo(id=350)
+    
+    # Concatenate features and targets
+    data = pd.concat([info.data.features, info.data.targets], axis=1)
+    target = 'Y'
+    
+    # Cast target values to integer
+    data[target] = data[target].astype(int)
+    
+    # Separate normal and fraud instances
+    normal = data[data[target] == 0]
+    fraud = data[data[target] == 1]
+    
+    # Split normal instances into training and testing sets
+    train, test = train_test_split(
+        normal,
+        train_size=split_ratio,
+        random_state=random_state
+    )
+    
+    # Combine testing set with fraud instances and shuffle
+    test = pd.concat([test, fraud])
+    test = test.sample(frac=1, random_state=42)
+    
+    # Reset index
+    train = train.reset_index(drop=True)
+    test = test.reset_index(drop=True)
+    
+    # Print information
+    _print_dataset_info(train, test, target, suggested_split=0.75)
     
     return train, test, target
 
+def _load_shuttle_dataset(
+    split_ratio: float,
+    random_state: Optional[int]
+) -> Tuple[pd.DataFrame, pd.DataFrame, str]:
+    """Load Statlog Shuttle dataset."""
+    # Source: https://archive.ics.uci.edu/dataset/148/statlog+shuttle
+    
+    """ The shuttle dataset contains 9 attributes all of which are numerical. Approximately 80% of the data belongs to class 1 """
+
+    # Fetch dataset
+    info = fetch_ucirepo(id=148)
+    
+    # Concatenate features and targets
+    data = pd.concat([
+        info.data.features.reset_index(drop=True),
+        info.data.targets.reset_index(drop=True)
+    ], axis=1)
+    
+    target = 'class'
+    
+    # Adjust target values to binary (1=normal, others=anomaly)
+    data[target] = data[target].replace({1: 0, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1, 7: 1})
+    data[target] = data[target].astype(int)
+    
+    # Separate normal and anomaly instances
+    normal = data[data[target] == 0]
+    anomaly = data[data[target] == 1]
+    
+    # Split normal instances
+    train, test = train_test_split(
+        normal,
+        train_size=split_ratio,
+        random_state=random_state
+    )
+    
+    # Combine and shuffle
+    test = pd.concat([test, anomaly])
+    test = test.sample(frac=1, random_state=42)
+    
+    # Reset index
+    train = train.reset_index(drop=True)
+    test = test.reset_index(drop=True)
+    
+    # Print information
+    _print_dataset_info(train, test, target, suggested_split=0.75)
+    
+    return train, test, target
+
+def _load_htru2_dataset(
+    split_ratio: float,
+    random_state: Optional[int]
+) -> Tuple[pd.DataFrame, pd.DataFrame, str]:
+    """Load HTRU2 pulsar dataset."""
+    # Source: https://archive.ics.uci.edu/dataset/372/htru2
+    
+    """
+    R. J. Lyon, B. W. Stappers, S. Cooper, J. M. Brooke, J. D. Knowles, 
+    Fifty Years of Pulsar Candidate Selection: From simple filters to a new principled real-time classification approach,
+    Monthly Notices of the Royal Astronomical Society 459 (1), 1104-1123, DOI: 10.1093/mnras/stw656
+    """
+
+    # Fetch dataset
+    info = fetch_ucirepo(id=372)
+    
+    # Concatenate features and targets
+    data = pd.concat([
+        info.data.features.reset_index(drop=True),
+        info.data.targets.reset_index(drop=True)
+    ], axis=1)
+    
+    target = 'class'
+    
+    # Cast target values to integer
+    data[target] = data[target].astype(int)
+    
+    # Separate normal and anomaly instances
+    normal = data[data[target] == 0]
+    anomaly = data[data[target] == 1]
+    
+    # Split normal instances
+    train, test = train_test_split(
+        normal,
+        train_size=split_ratio,
+        random_state=random_state
+    )
+    
+    # Combine and shuffle
+    test = pd.concat([test, anomaly])
+    test = test.sample(frac=1, random_state=42)
+    
+    # Reset index
+    train = train.reset_index(drop=True)
+    test = test.reset_index(drop=True)
+    
+    # Print information
+    _print_dataset_info(train, test, target, suggested_split=0.9)
+    
+    return train, test, target
+
+def _print_dataset_info(
+    train: pd.DataFrame,
+    test: pd.DataFrame,
+    target: str,
+    suggested_split: float
+) -> None:
+    """Print dataset information."""
+    info = {
+        "Train Length": len(train),
+        "Test Length": len(test),
+        "Suggested Split_Ratio": suggested_split
+    }
+    
+    # Add target distribution
+    for key, value in test[target].value_counts().to_dict().items():
+        label = "Anomalies [1]" if key == 1 else "Normal [0]"
+        info[label] = value
+    
+    print(info)
