@@ -6,7 +6,7 @@ long_description = (this_directory / "README.md").read_text()
 
 setuptools.setup(
     name="segmentae",
-    version="1.5.10", 
+    version="1.5.16", 
     description="SegmentAE: A Python Library for Anomaly Detection Optimization",
     long_description=long_description,      
     long_description_content_type="text/markdown",
