@@ -304,26 +304,26 @@ For a complete optimizer example → <a href="https://github.com/TsLu1s/SegmentA
 
 ### 1. Basic Custom Model
 Use your own Keras autoencoder with SegmentAE:
-- **Example:** [basic_model.py](https://github.com/TsLu1s/SegmentAE/blob/main/examples/basic_model.py)
+- **Example:** [basic_model.py](https://github.com/TsLu1s/segmentae/blob/main/examples/custom_autoencoders.py)
 - Shows custom Sequential model integration
 - Demonstrates multiple threshold evaluation
 
 ### 2. Baseline Autoencoders
 Use built-in DenseAutoencoder or BatchNormAutoencoder:
-- **Example:** [baseline_models.py](https://github.com/TsLu1s/SegmentAE/blob/main/examples/baseline_models.py)
+- **Example:** [baseline_models.py](https://github.com/TsLu1s/segmentae/blob/main/examples/baseline.py)
 - Shows built-in autoencoder usage
 - Includes model summary and training visualization
 
 ### 3. Grid Search Optimization
 Find optimal configuration automatically:
-- **Example:** [optimizer_application.py](https://github.com/TsLu1s/SegmentAE/blob/main/examples/optimizer_application.py)
+- **Example:** [optimizer_application.py](https://github.com/TsLu1s/segmentae/blob/main/examples/optimizer.py)
 - Evaluates multiple autoencoders and clustering configs
 - Multiple clustering algorithms
 - Generates performance leaderboard
 
 ### 4. Unlabeled Data Detection
 Detect anomalies without ground truth labels:
-- **Example:** [unlabeled_application.py](https://github.com/TsLu1s/SegmentAE/blob/main/examples/unlabeled_application.py)
+- **Example:** [unlabeled_application.py](https://github.com/TsLu1s/segmentae/blob/main/examples/unlabeled.py)
 - Shows reconstruction-only workflow
 - Useful for production deployment
 
