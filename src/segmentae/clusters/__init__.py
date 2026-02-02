@@ -1,18 +1,18 @@
 from segmentae.clusters.clustering import Clustering, ClusteringConfig
-from segmentae.clusters.registry import ClusterRegistry
 from segmentae.clusters.models import (
+    AgglomerativeCluster,
+    GaussianMixtureCluster,
     KMeansCluster,
     MiniBatchKMeansCluster,
-    GaussianMixtureCluster,
-    AgglomerativeCluster
 )
+from segmentae.clusters.registry import ClusterRegistry
 
 __all__ = [
-    'Clustering',
-    'ClusteringConfig',
-    'ClusterRegistry',
-    'KMeansCluster',
-    'MiniBatchKMeansCluster',
-    'GaussianMixtureCluster',
-    'AgglomerativeCluster'
+    "Clustering",
+    "ClusteringConfig",
+    "ClusterRegistry",
+    "KMeansCluster",
+    "MiniBatchKMeansCluster",
+    "GaussianMixtureCluster",
+    "AgglomerativeCluster",
 ]

@@ -1,7 +1,7 @@
-from typing import Protocol, Union, Any, Dict, List
-import pandas as pd
-import numpy as np
+from typing import Any, Dict, List, Protocol, Union
 
+import numpy as np
+import pandas as pd
 
 # Type aliases for commonly used types
 DataFrame = pd.DataFrame
@@ -14,7 +14,7 @@ class AutoencoderProtocol(Protocol):
     """
     Protocol defining the interface for autoencoder models.
     """
-    
+
     def predict(self, X: Union[DataFrame, NDArray]) -> NDArray:
         """
         Generate reconstructions from input data.
@@ -26,15 +26,15 @@ class ClusterModelProtocol(Protocol):
     """
     Protocol defining the interface for clustering models.
     """
-    
+
     def fit(self, X: DataFrame) -> None:
         """Fit clustering model to data."""
         ...
-    
+
     def predict(self, X: DataFrame) -> NDArray:
         """Predict cluster assignments."""
         ...
-    
+
     @property
     def n_clusters(self) -> int:
         """Number of clusters."""
@@ -45,11 +45,11 @@ class PreprocessorProtocol(Protocol):
     """
     Protocol defining the interface for preprocessing components.
     """
-    
-    def fit(self, X: DataFrame) -> 'PreprocessorProtocol':
+
+    def fit(self, X: DataFrame) -> "PreprocessorProtocol":
         """Fit preprocessor to data."""
         ...
-    
+
     def transform(self, X: DataFrame) -> DataFrame:
         """Transform data using fitted preprocessor."""
         ...

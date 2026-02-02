@@ -1,29 +1,33 @@
+from typing import List, Optional
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from keras.models import Model
-from keras.layers import Input, Dense, Dropout, BatchNormalization
-from keras.optimizers import Adam, SGD, RMSprop, Adagrad, Adadelta, Adamax, Nadam
 from keras.callbacks import EarlyStopping
-from typing import List, Optional
-import matplotlib.pyplot as plt
+from keras.layers import BatchNormalization, Dense, Dropout, Input
+from keras.models import Model
+from keras.optimizers import SGD, Adadelta, Adagrad, Adam, Adamax, Nadam, RMSprop
+
 
 class EnsembleAutoencoder:
-    def __init__(self,
-                 n_autoencoders: int = 3,
-                 hidden_dims: List[List[int]] = [[12, 8, 4]] * 3,
-                 encoder_activations: List[str] = ['relu'] * 3,
-                 decoder_activations: List[str] = ['relu'] * 3,
-                 optimizers: List[str] = ['adam'] * 3,
-                 learning_rates: List[float] = [0.001] * 3,
-                 epochs_list: List[int] = [300] * 3,
-                 val_size_list: List[float] = [0.15] * 3,
-                 stopping_patients: List[int] = [10] * 3,
-                 dropout_rates: List[float] = [0] * 3,
-                 batch_sizes: List[Optional[int]] = [32] * 3,
-                 use_batch_norm: List[bool] = [False] * 3):
+    def __init__(
+        self,
+        n_autoencoders: int = 3,
+        hidden_dims: List[List[int]] = [[12, 8, 4]] * 3,
+        encoder_activations: List[str] = ["relu"] * 3,
+        decoder_activations: List[str] = ["relu"] * 3,
+        optimizers: List[str] = ["adam"] * 3,
+        learning_rates: List[float] = [0.001] * 3,
+        epochs_list: List[int] = [300] * 3,
+        val_size_list: List[float] = [0.15] * 3,
+        stopping_patients: List[int] = [10] * 3,
+        dropout_rates: List[float] = [0] * 3,
+        batch_sizes: List[Optional[int]] = [32] * 3,
+        use_batch_norm: List[bool] = [False] * 3,
+    ):
         """
         EnsembleAutoencoder is a class for building and training an ensemble of dense autoencoder models.
-        
+
         Parameters:
         - n_autoencoders (int): Number of autoencoders in the ensemble.
         - hidden_dims (list of list of int): List of lists, where each sublist represents the sizes of hidden layers for one autoencoder.
@@ -38,15 +42,22 @@ class EnsembleAutoencoder:
         - batch_sizes (list of int): List of batch sizes for each autoencoder.
         - use_batch_norm (list of bool): Flags to indicate whether to use batch normalization for each autoencoder.
         """
-        
-        assert len(hidden_dims) == len(encoder_activations)\
-               == len(decoder_activations) == len(optimizers)\
-               == len(learning_rates) == len(epochs_list)\
-               == len(val_size_list) == len(stopping_patients)\
-               == len(dropout_rates) == len(batch_sizes)\
-               == len(use_batch_norm) == n_autoencoders,\
-            "All parameter lists must have the same length as n_autoencoders"
-        
+
+        assert (
+            len(hidden_dims)
+            == len(encoder_activations)
+            == len(decoder_activations)
+            == len(optimizers)
+            == len(learning_rates)
+            == len(epochs_list)
+            == len(val_size_list)
+            == len(stopping_patients)
+            == len(dropout_rates)
+            == len(batch_sizes)
+            == len(use_batch_norm)
+            == n_autoencoders
+        ), "All parameter lists must have the same length as n_autoencoders"
+
         self.n_autoencoders = n_autoencoders
         self.hidden_dims = hidden_dims
         self.encoder_activations = encoder_activations
@@ -74,20 +85,32 @@ class EnsembleAutoencoder:
         - optimizer: An instance of the specified optimizer.
         """
         optimizers = {
-            'adam': Adam(learning_rate=learning_rate),
-            'sgd': SGD(learning_rate=learning_rate),
-            'rmsprop': RMSprop(learning_rate=learning_rate),
-            'adagrad': Adagrad(learning_rate=learning_rate),
-            'adadelta': Adadelta(learning_rate=learning_rate),
-            'adamax': Adamax(learning_rate=learning_rate),
-            'nadam': Nadam(learning_rate=learning_rate)
+            "adam": Adam(learning_rate=learning_rate),
+            "sgd": SGD(learning_rate=learning_rate),
+            "rmsprop": RMSprop(learning_rate=learning_rate),
+            "adagrad": Adagrad(learning_rate=learning_rate),
+            "adadelta": Adadelta(learning_rate=learning_rate),
+            "adamax": Adamax(learning_rate=learning_rate),
+            "nadam": Nadam(learning_rate=learning_rate),
         }
         if optimizer_name in optimizers:
             return optimizers[optimizer_name]
         else:
-            raise ValueError(f"Unsupported optimizer: {optimizer_name}. Supported optimizers are: {list(optimizers.keys())}")
+            raise ValueError(
+                f"Unsupported optimizer: {optimizer_name}. Supported optimizers are: {list(optimizers.keys())}"
+            )
 
-    def _build_autoencoder(self, input_dim, hidden_dims, encoder_activation, decoder_activation, optimizer_name, learning_rate, dropout_rate, use_batch_norm):
+    def _build_autoencoder(
+        self,
+        input_dim,
+        hidden_dims,
+        encoder_activation,
+        decoder_activation,
+        optimizer_name,
+        learning_rate,
+        dropout_rate,
+        use_batch_norm,
+    ):
         """
         Build a single autoencoder model.
 
@@ -110,7 +133,7 @@ class EnsembleAutoencoder:
             if use_batch_norm:
                 encoder = BatchNormalization()(encoder)
             encoder = Dropout(dropout_rate)(encoder)
-        
+
         decoder = encoder
         for dim in reversed(hidden_dims[:-1]):
             decoder = Dense(dim, activation=decoder_activation)(decoder)
@@ -120,8 +143,10 @@ class EnsembleAutoencoder:
         decoder = Dense(input_dim, activation="sigmoid")(decoder)
 
         autoencoder = Model(inputs=input_layer, outputs=decoder)
-        autoencoder.compile(optimizer=self._get_optimizer(optimizer_name, learning_rate), loss="mean_squared_error")
-        
+        autoencoder.compile(
+            optimizer=self._get_optimizer(optimizer_name, learning_rate), loss="mean_squared_error"
+        )
+
         return autoencoder
 
     def fit(self, input_data: pd.DataFrame):
@@ -153,19 +178,35 @@ class EnsembleAutoencoder:
 
         for i in range(self.n_autoencoders):
             autoencoder = self._build_autoencoder(
-                input_dim, self.hidden_dims[i], self.encoder_activations[i],
-                self.decoder_activations[i], self.optimizers[i], self.learning_rates[i],
-                self.dropout_rates[i], self.use_batch_norm[i]
+                input_dim,
+                self.hidden_dims[i],
+                self.encoder_activations[i],
+                self.decoder_activations[i],
+                self.optimizers[i],
+                self.learning_rates[i],
+                self.dropout_rates[i],
+                self.use_batch_norm[i],
             )
-            
-            early_stopping = EarlyStopping(monitor='val_loss', patience=self.stopping_patients[i],
-                                           verbose=1, mode='min', restore_best_weights=True)
-            
+
+            early_stopping = EarlyStopping(
+                monitor="val_loss",
+                patience=self.stopping_patients[i],
+                verbose=1,
+                mode="min",
+                restore_best_weights=True,
+            )
+
             autoencoder.fit(
-                x=train, y=train, epochs=self.epochs_list[i], batch_size=self.batch_sizes[i],
-                shuffle=True, validation_split=self.val_size_list[i], verbose=1, callbacks=[early_stopping]
+                x=train,
+                y=train,
+                epochs=self.epochs_list[i],
+                batch_size=self.batch_sizes[i],
+                shuffle=True,
+                validation_split=self.val_size_list[i],
+                verbose=1,
+                callbacks=[early_stopping],
             )
-            
+
             self.autoencoders.append(autoencoder)
 
     def predict(self, input_data: pd.DataFrame):
@@ -176,7 +217,7 @@ class EnsembleAutoencoder:
         for i, autoencoder in enumerate(self.autoencoders):
             predictions[i] = autoencoder.predict(input_data, verbose=0)
         return np.mean(predictions, axis=0)
-    
+
     def summary(self):
         """
         Print the summary of each autoencoder model in the ensemble.
@@ -194,7 +235,7 @@ class EnsembleAutoencoder:
         for autoencoder in self.autoencoders:
             evaluation_results.append(autoencoder.evaluate(input_data, input_data))
         return evaluation_results
-    
+
     def save_model(self, file_path: str):
         """
         Save each trained autoencoder model to a file.
@@ -208,10 +249,10 @@ class EnsembleAutoencoder:
         """
         for i, history in enumerate(self.histories):
             plt.figure()
-            plt.plot(history.history['loss'], label='Training Loss')
-            plt.plot(history.history['val_loss'], label='Validation Loss')
-            plt.title(f'Training and Validation Loss for Autoencoder {i+1}')
-            plt.xlabel('Epochs')
-            plt.ylabel('Loss')
+            plt.plot(history.history["loss"], label="Training Loss")
+            plt.plot(history.history["val_loss"], label="Validation Loss")
+            plt.title(f"Training and Validation Loss for Autoencoder {i+1}")
+            plt.xlabel("Epochs")
+            plt.ylabel("Loss")
             plt.legend()
             plt.show()

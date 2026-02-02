@@ -15,68 +15,64 @@ Key Components:
 __version__ = "2.0.0"
 __author__ = "Luís Fernando da Silva Santos"
 
-# Core components
-from segmentae.core import (
-    PhaseType,
-    ClusterModel,
-    ThresholdMetric,
-    EncoderType,
-    ScalerType,
-    ImputerType
-)
-
-# Preprocessing
-from segmentae.processing.preprocessing import Preprocessing
-
-# Clustering
-from segmentae.clusters import Clustering
-
-# Pipeline
-from segmentae.pipeline import SegmentAE
-
-# Optimization
-from segmentae.optimization import SegmentAE_Optimizer
-
-# Metrics
-from segmentae.metrics import metrics_classification, metrics_regression
-
-# Data Sources
-from segmentae.data_sources import load_dataset
+from segmentae.autoencoders.batch_norm import BatchNormAutoencoder
 
 # Note: Autoencoders are kept in their original location
 # They should be imported directly when available:
 from segmentae.autoencoders.dense import DenseAutoencoder
-from segmentae.autoencoders.batch_norm import BatchNormAutoencoder
 from segmentae.autoencoders.ensemble import EnsembleAutoencoder
+
+# Clustering
+from segmentae.clusters import Clustering
+
+# Core components
+from segmentae.core import (
+    ClusterModel,
+    EncoderType,
+    ImputerType,
+    PhaseType,
+    ScalerType,
+    ThresholdMetric,
+)
+
+# Data Sources
+from segmentae.data_sources import load_dataset
+
+# Metrics
+from segmentae.metrics import metrics_classification, metrics_regression
+
+# Optimization
+from segmentae.optimization import SegmentAE_Optimizer
+
+# Pipeline
+from segmentae.pipeline import SegmentAE
+
+# Preprocessing
+from segmentae.processing.preprocessing import Preprocessing
 
 __all__ = [
     # Version info
-    '__version__',
-    '__author__',
-    
+    "__version__",
+    "__author__",
     # Core enums
-    'PhaseType',
-    'ClusterModel',
-    'ThresholdMetric',
-    'EncoderType',
-    'ScalerType',
-    'ImputerType',
-    
+    "PhaseType",
+    "ClusterModel",
+    "ThresholdMetric",
+    "EncoderType",
+    "ScalerType",
+    "ImputerType",
     # Main classes
-    'Preprocessing',
-    'Clustering',
-    'SegmentAE',
-    'SegmentAE_Optimizer',
-    
+    "Preprocessing",
+    "Clustering",
+    "SegmentAE",
+    "SegmentAE_Optimizer",
     # Metrics
-    'metrics_classification',
-    'metrics_regression',
-    
+    "metrics_classification",
+    "metrics_regression",
     # Data
-    'load_dataset',
-    
+    "load_dataset",
     # Autoencoders
-    'DenseAutoencoder',
-    'BatchNormAutoencoder',
-    'EnsembleAutoencoder',
+    "DenseAutoencoder",
+    "BatchNormAutoencoder",
+    "EnsembleAutoencoder",
 ]

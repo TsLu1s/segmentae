@@ -1,6 +1,6 @@
 class SegmentAEError(Exception):
     """Base exception class for all SegmentAE errors."""
-    
+
     def __init__(self, message: str):
         self.message = message
         super().__init__(self.message)
@@ -8,21 +8,21 @@ class SegmentAEError(Exception):
 
 class ClusteringError(SegmentAEError):
     """Exception raised for clustering-related errors."""
-    
+
     def __init__(self, message: str):
         super().__init__(f"Clustering Error: {message}")
 
 
 class ReconstructionError(SegmentAEError):
     """Exception raised for reconstruction-related errors."""
-    
+
     def __init__(self, message: str):
         super().__init__(f"Reconstruction Error: {message}")
 
 
 class ValidationError(SegmentAEError):
     """Exception raised for input validation errors."""
-    
+
     def __init__(self, message: str, suggestion: str = None):
         error_msg = f"Validation Error: {message}"
         if suggestion:
@@ -32,7 +32,7 @@ class ValidationError(SegmentAEError):
 
 class ModelNotFittedError(SegmentAEError):
     """Exception raised when attempting to use a model before fitting."""
-    
+
     def __init__(self, message: str = None, component: str = "Model"):
         if message is None:
             message = (
@@ -44,7 +44,7 @@ class ModelNotFittedError(SegmentAEError):
 
 class ConfigurationError(SegmentAEError):
     """Exception raised for invalid configuration parameters."""
-    
+
     def __init__(self, message: str, valid_options: list = None):
         error_msg = f"Configuration Error: {message}"
         if valid_options:
@@ -55,6 +55,6 @@ class ConfigurationError(SegmentAEError):
 
 class AutoencoderError(SegmentAEError):
     """Exception raised for autoencoder-related errors."""
-    
+
     def __init__(self, message: str):
         super().__init__(f"Autoencoder Error: {message}")

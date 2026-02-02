@@ -1,23 +1,42 @@
+"""
+SegmentAE Example: Unlabeled Anomaly Detection
+==============================================
+
+This example demonstrates how to use SegmentAE for unsupervised anomaly detection
+on unlabeled data, simulating real-world scenarios where ground truth is unavailable.
+
+Features demonstrated:
+- Unsupervised anomaly detection workflow
+- Built-in DenseAutoencoder for reconstruction
+- Reconstruction error analysis
+- Cluster-wise anomaly detection
+- Optional ground truth evaluation
+"""
+
+import warnings
+
 import tensorflow as tf
 
-from segmentae import SegmentAE, Preprocessing, Clustering
-from segmentae.autoencoders import DenseAutoencoder       #, BatchNormAutoencoder
+from segmentae import Clustering, Preprocessing, SegmentAE
+from segmentae.autoencoders import DenseAutoencoder  # , BatchNormAutoencoder
 from segmentae.data_sources import load_dataset
+
+warnings.filterwarnings("ignore")
 
 
 ############################################################################################
 ### Data Loading (Unlabeled Scenario)
 
 train, future_data, target = load_dataset(
-    dataset_selection='htru2_dataset',  # Options: 'default_credit_card', 'htru2_dataset', 'shuttle_148'
-    split_ratio=0.75                          
+    dataset_selection="htru2_dataset",  # Options: 'default_credit_card', 'htru2_dataset', 'shuttle_148'
+    split_ratio=0.75,
 )
 
 # Reset indices
 train = train.reset_index(drop=True)
 future_data = future_data.reset_index(drop=True)
 
-# For unlabeled scenario, we don't use the target column
+# For unlabeled scenario, it is not used the target column
 X_train = train.drop(columns=[target]).copy()
 X_future_data = future_data.drop(columns=[target]).copy()
 
@@ -29,9 +48,9 @@ X_future_data = future_data.drop(columns=[target]).copy()
 ### Preprocessing with Enhanced Error Handling
 
 pr = Preprocessing(
-    encoder="IFrequencyEncoder",   # "LabelEncoder", "OneHotEncoder"
-    scaler="StandardScaler",       # "MinMaxScaler", "RobustScaler"
-    imputer=None
+    encoder="IFrequencyEncoder",  # "LabelEncoder", "OneHotEncoder"
+    scaler="StandardScaler",  # "MinMaxScaler", "RobustScaler"
+    imputer=None,
 )
 
 pr.fit(X=X_train)
@@ -39,12 +58,13 @@ X_train = pr.transform(X=X_train)
 X_future_data = pr.transform(X=X_future_data)
 
 ############################################################################################
+### Clustering Implementation
 
-# GMM clustering for soft assignments
+# KMeans clustering for hard assignments
 cl_model = Clustering(
     cluster_model=["KMeans"],  # "KMeans", "MiniBatchKMeans", "GMM", "Agglomerative"
     n_clusters=3,
-    covariance_type='full'     # GMM-specific parameter
+    covariance_type="full",  # GMM-specific parameter
 )
 
 cl_model.clustering_fit(X=X_train)
@@ -57,16 +77,16 @@ print(f"Num GPUs Available: {len(tf.config.experimental.list_physical_devices('G
 
 # DenseAutoencoder with architecture optimized for reconstruction
 denseAutoencoder = DenseAutoencoder(
-    hidden_dims=[16, 12, 8, 4],        # Bottleneck architecture
-    encoder_activation='relu',
-    decoder_activation='relu',
-    optimizer='adam',
+    hidden_dims=[16, 12, 8, 4],  # Bottleneck architecture
+    encoder_activation="relu",
+    decoder_activation="relu",
+    optimizer="adam",
     learning_rate=0.001,
     epochs=150,
-    val_size=0.15,                     # Validation split for monitoring
-    stopping_patient=10,               # Early stopping
+    val_size=0.15,  # Validation split for monitoring
+    stopping_patient=10,  # Early stopping
     dropout_rate=0.1,
-    batch_size=None
+    batch_size=None,
 )
 
 # Train autoencoder on unlabeled data
@@ -97,58 +117,55 @@ batchAutoencoder.fit(input_data=X_train)
 ############################################################################################
 ### SegmentAE Integration for Unlabeled Anomaly Detection
 
-sg = SegmentAE(
-    ae_model=denseAutoencoder,
-    cl_model=cl_model
-)
+sg = SegmentAE(ae_model=denseAutoencoder, cl_model=cl_model)
 
 ### Train Reconstruction (Unsupervised)
+
 sg.reconstruction(
     input_data=X_train,
-    threshold_metric="mse" # || "mse", "mae", "rmse", "max_error"  # Can also use MAE, RMSE, or MAX_ERROR
+    threshold_metric="mse",  # || "mse", "mae", "rmse", "max_error" - Can also use MAE, RMSE, or MAX_ERROR
 )
 
 # Access reconstruction metadata
 preds_train = sg.preds_train
 recon_metrics_train = sg.reconstruction_eval
 
-print("\n" + "="*50)
+print("\n" + "=" * 50)
 print("RECONSTRUCTION ANALYSIS")
-print("="*50)
+print("=" * 50)
 print(f"Reconstruction threshold: {sg.threshold:.6f}")
 print(f"Mean reconstruction error: {recon_metrics_train['mse'].mean():.6f}")
 print(f"Std reconstruction error: {recon_metrics_train['mse'].std():.6f}")
 
 ############################################################################################
 ### Anomaly Detection on Unlabeled Future Data
+
 threshold_ratio = 2.0
 
-predictions = sg.detections(
-    input_data=X_future_data,
-    threshold_ratio=threshold_ratio
-)
+predictions = sg.detections(input_data=X_future_data, threshold_ratio=threshold_ratio)
 
 # Analyze Detection Results
-n_anomalies = predictions['Predicted Anomalies'].sum()
+n_anomalies = predictions["Predicted Anomalies"].sum()
 anomaly_rate = n_anomalies / len(predictions)
 
-print("\n" + "="*50)
+print("\n" + "=" * 50)
 print("ANOMALY DETECTION RESULTS")
-print("="*50)
+print("=" * 50)
 print(f"Threshold ratio: {threshold_ratio}")
 print(f"Anomalies detected: {n_anomalies} / {len(predictions)}")
 print(f"Anomaly rate: {anomaly_rate:.2%}")
 
 # Cluster-wise analysis
-cluster_analysis = predictions.groupby('Cluster')['Predicted Anomalies'].agg([
-    'count', 'sum', 'mean'
-])
-cluster_analysis.columns = ['Total Samples', 'Anomalies', 'Anomaly Rate']
+cluster_analysis = predictions.groupby("Cluster")["Predicted Anomalies"].agg(
+    ["count", "sum", "mean"]
+)
+cluster_analysis.columns = ["Total Samples", "Anomalies", "Anomaly Rate"]
 print("\nCluster-wise Analysis:")
 print(cluster_analysis)
 
 ############################################################################################
 ### Optional: If ground truth is available for evaluation
+
 """
 from segmentae.metrics import metrics_classification
 
@@ -162,13 +179,3 @@ for metric, value in actual_metrics.items():
 """
 
 ############################################################################################
-############################################################################################
-
-
-
-
-
-
-
-
-
