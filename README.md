@@ -22,14 +22,6 @@
 
 `SegmentAE` is designed to enhance anomaly detection performance through the optimization of reconstruction error by integrating and intersecting clustering methods with tabular autoencoders. Built with enterprise-grade architecture, it provides a versatile, scalable, and robust solution for anomaly detection applications in domains such as financial fraud detection, network security, and industrial monitoring.
 
-### Key Architectural Features (v2.0+)
-
--  **Professional Architecture**: Clean separation of concerns with robust principles
--  **Type Safety**: Comprehensive Pydantic validation and type hints throughout
--  **Design Patterns**: Registry, Strategy, and Template Method patterns
--  **Enum-Based Configuration**: Type-safe constants for all parameters
--  **Custom Exceptions**: Informative error messages with actionable suggestions
-
 ## Key Features and Capabilities
 
 ### 1. General Applicability on Tabular Datasets
