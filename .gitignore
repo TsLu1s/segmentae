@@ -48,3 +48,6 @@ examples/best_autoencoder.joblib
 examples/best_autoencoder.meta.json
 examples/fitted_segmentae.pkl
 examples/best_config.json
+
+# Jupyter
+.ipynb_checkpoints/

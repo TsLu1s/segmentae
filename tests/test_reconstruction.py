@@ -113,7 +113,6 @@ class TestComputeColumnMetrics:
         assert "Column" in result.columns
         assert "MSE" in result.columns
         assert "MAE" in result.columns
-        # Last row should be total metrics
         assert result.iloc[-1]["Column"] == "Total Metrics"
 
     def test_perfect_reconstruction_columns(self):

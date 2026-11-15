@@ -3,7 +3,6 @@ from typing import Any, Dict, Protocol, TypeAlias, Union, runtime_checkable
 import numpy as np
 import pandas as pd
 
-# Type aliases for commonly used types
 DataFrame: TypeAlias = pd.DataFrame
 Series: TypeAlias = pd.Series
 NDArray: TypeAlias = np.ndarray

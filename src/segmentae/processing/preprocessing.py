@@ -20,11 +20,9 @@ class PreprocessingConfig(BaseModel):
     model_config = ConfigDict(use_enum_values=False)
 
     # Defaults are enum members: Pydantic does not run validators on default values
-    encoder: Optional[EncoderType] = None  # "IFrequencyEncoder", "LabelEncoder", "OneHotEncoder"
-    scaler: Optional[ScalerType] = (
-        ScalerType.MINMAX
-    )  # "MinMaxScaler", "StandardScaler", "RobustScaler"
-    imputer: Optional[ImputerType] = ImputerType.SIMPLE  # "Simple"
+    encoder: Optional[EncoderType] = None
+    scaler: Optional[ScalerType] = ScalerType.MINMAX
+    imputer: Optional[ImputerType] = ImputerType.SIMPLE
 
     @field_validator("encoder", mode="before")
     @classmethod
@@ -99,7 +97,6 @@ class Preprocessing:
             imputer: Missing value imputer ("Simple" or an ``ImputerType``);
                 None disables imputation.
         """
-        # Validate and store configuration
         self.config = PreprocessingConfig(encoder=encoder, scaler=scaler, imputer=imputer)
         self._reset()
 
@@ -223,15 +220,12 @@ class Preprocessing:
         """
         X_ = self._align_columns(X)
 
-        # Apply encoder
         if self._encoder is not None:
             X_ = self._encode(X_)
 
-        # Apply scaler
         if self._scaler is not None and self._num_cols:
             X_[self._num_cols] = self._scale(X_[self._num_cols])
 
-        # Apply imputer (only when there is something to impute)
         if self._imputer is not None and X_[self._num_cols].isnull().to_numpy().any():
             X_[self._num_cols] = self._impute(X_[self._num_cols])
 

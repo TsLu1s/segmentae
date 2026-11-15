@@ -83,7 +83,7 @@ SegmentAE requires Python 3.10 or newer.
   </a>
 </p>
 
-<sub>Click the diagram to open it at full resolution. The editable source is <a href="https://github.com/TsLu1s/SegmentAE/blob/main/docs/SegmentAE_Architecture_Final.drawio">docs/SegmentAE_Architecture_Final.drawio</a>.</sub>
+<sub>Click the diagram to open it at full resolution. The PNG embeds the editable diagram, so <a href="https://github.com/TsLu1s/SegmentAE/blob/main/docs/SegmentAE_Architecture_Final.drawio.png">docs/SegmentAE_Architecture_Final.drawio.png</a> can be opened directly in draw.io.</sub>
 
 
 The SegmentAE framework consists of several integrated components, each playing a critical role in the optimization of anomaly detection through clustering and tabular autoencoders. The pipeline is structured with professional design patterns to ensure seamless data flow and modular customization.
@@ -328,7 +328,6 @@ predictions = sg.detections(
 # Besides the reconstructed features, every row comes with its verdict and score
 print(predictions[["Predicted Anomalies", "Cluster", "Reconstruction Error", "Threshold"]].head())
 
-# Use the new metrics module for evaluation
 final_metrics = metrics_classification(
     y_true=y_future_data,
     y_pred=predictions["Predicted Anomalies"]

@@ -71,17 +71,15 @@ ensembleAutoencoder = EnsembleAutoencoder(
     dropout_rates=[0.1, 0.2, 0.3],
     batch_sizes=[None, None, 128],
     use_batch_norm=[False, False, False],
-    random_state=42,  # Reproducible training
+    random_state=42,
 )
 
-# Train the ensemble
 ensembleAutoencoder.fit(X_train)
 print("Ensemble autoencoder trained successfully!")
 
 ############################################################################################
 ### AutoEncoder Model: Custom Basic Model
 
-# Define encoder architecture
 encoder = Sequential(
     [
         Input(shape=(X_train.shape[1],)),
@@ -92,7 +90,6 @@ encoder = Sequential(
     ]
 )
 
-# Define decoder architecture
 decoder = Sequential(
     [
         Input(shape=(8,)),
@@ -103,11 +100,9 @@ decoder = Sequential(
     ]
 )
 
-# Combine into autoencoder
 basicAutoencoder = Sequential([encoder, decoder])
 basicAutoencoder.compile(optimizer="adam", loss="mse")
 
-# Train the model
 basicAutoencoder.fit(X_train, X_train, epochs=50, batch_size=None, validation_split=0.1)
 print("Basic autoencoder trained successfully!")
 
@@ -139,7 +134,6 @@ optimizer = SegmentAE_Optimizer(
 print("\nRunning grid search optimization...")
 sg = optimizer.optimize(X_train, X_valid, y_valid)
 
-# Access optimization results
 preds_valid = sg.preds_test
 recon_metrics_valid = sg.reconstruction_test
 leaderboard = optimizer.leaderboard
@@ -164,7 +158,6 @@ threshold = optimizer.best_threshold_ratio
 # Hold-out data was not used to select the configuration
 predictions = sg.detections(input_data=X_holdout, threshold_ratio=threshold)
 
-# Calculate final metrics
 final_metrics = metrics_classification(y_holdout, predictions["Predicted Anomalies"])
 print("\nFinal Hold-out Performance:")
 for metric in final_metrics.columns:

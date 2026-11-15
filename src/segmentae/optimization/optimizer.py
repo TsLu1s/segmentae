@@ -125,7 +125,6 @@ class SegmentAE_Optimizer:
         if threshold_ratios is None:
             threshold_ratios = [0.75, 1, 1.5, 2, 3, 4]
 
-        # Validate configuration
         self.config = OptimizerConfig(
             n_clusters_list=n_clusters_list,
             cluster_models=cluster_models,
@@ -144,7 +143,6 @@ class SegmentAE_Optimizer:
         self.random_state = random_state
         self.verbose = verbose
 
-        # Validate autoencoders
         self._validate_autoencoders()
 
         self._reset_results()
@@ -219,7 +217,6 @@ class SegmentAE_Optimizer:
                         self._log(f"Autoencoder: {type(autoencoder).__name__}")
                         self._log("")
 
-                        # Evaluate configuration
                         config_results = self._evaluate_configuration(
                             autoencoder=autoencoder,
                             ae_index=ae_index,
@@ -243,7 +240,6 @@ class SegmentAE_Optimizer:
             if self.optimal_segmentae is not None:
                 self.optimal_segmentae._reconstruction_cache = None
 
-        # Create leaderboard
         self.leaderboard = self._create_leaderboard(results)
 
         # Leave the returned pipeline in the state of the winning threshold ratio
@@ -252,8 +248,6 @@ class SegmentAE_Optimizer:
         self._print_optimization_summary()
 
         return self.optimal_segmentae
-
-    # Properties exposing the configuration and the best result
 
     @property
     def n_clusters_list(self) -> List[int]:
@@ -310,8 +304,6 @@ class SegmentAE_Optimizer:
             "threshold_metric": self.threshold_metric,
         }
 
-    # Private methods
-
     def _evaluate_configuration(
         self,
         autoencoder: Any,
@@ -325,12 +317,10 @@ class SegmentAE_Optimizer:
         reconstruction_cache: Dict,
     ) -> List[pd.DataFrame]:
         """Evaluate a single configuration across all threshold ratios."""
-        # Create SegmentAE and fit reconstruction
         sg = SegmentAE(ae_model=autoencoder, cl_model=clustering, verbose=self.verbose)
         sg._reconstruction_cache = reconstruction_cache
         sg.reconstruction(input_data=X_train, threshold_metric=self.config.threshold_metric)
 
-        # Evaluate across threshold ratios
         config_results = []
         for threshold_ratio in self.config.threshold_ratios:
             result = self._evaluate_single_threshold(
@@ -359,14 +349,12 @@ class SegmentAE_Optimizer:
         y_test: pd.Series,
     ) -> pd.DataFrame:
         """Evaluate a single threshold ratio."""
-        # Run evaluation
         evaluation = sg.evaluation(
             input_data=X_test, target_col=y_test, threshold_ratio=threshold_ratio
         )
 
         global_metrics = evaluation["global metrics"].copy()
 
-        # Extract performance score
         performance = float(global_metrics[self.config.performance_metric.value].iloc[0])
 
         # Update best model if necessary (the first of equal scores is kept)
@@ -377,7 +365,6 @@ class SegmentAE_Optimizer:
             self.best_n_clusters = n_clusters
             self.best_autoencoder_index = ae_index
 
-        # Add configuration info to metrics
         global_metrics["Autoencoder"] = type(autoencoder).__name__
         global_metrics["Cluster"] = cluster_model
         global_metrics["N_Clusters"] = n_clusters
@@ -435,8 +422,6 @@ class SegmentAE_Optimizer:
         """Print a progress message when verbose."""
         if self.verbose:
             print(message)
-
-    # Validation methods
 
     def _validate_autoencoders(self) -> None:
         """Validate autoencoder models."""

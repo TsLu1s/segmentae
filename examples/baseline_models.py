@@ -69,9 +69,8 @@ cl_model.clustering_fit(X=X_train)
 
 print("Num GPUs Available: ", len(tf.config.list_physical_devices("GPU")))
 
-# DenseAutoencoder with comprehensive configuration
 denseAutoencoder = DenseAutoencoder(
-    hidden_dims=[16, 8, 4],  # Architecture definition
+    hidden_dims=[16, 8, 4],
     encoder_activation="relu",
     decoder_activation="relu",
     output_activation="sigmoid",  # matches MinMax-scaled data
@@ -80,16 +79,14 @@ denseAutoencoder = DenseAutoencoder(
     epochs=150,
     val_size=0.15,
     stopping_patient=10,  # Early stopping
-    dropout_rate=0.1,  # Regularization
+    dropout_rate=0.1,
     batch_size=None,
-    random_state=42,  # Reproducible training
+    random_state=42,
 )
 
-# Fit the autoencoder
 denseAutoencoder.fit(input_data=X_train)
 
-# Model inspection methods
-denseAutoencoder.summary()  # Model architecture
+denseAutoencoder.summary()
 # Training visualization (opt-in): opens a window that pauses the script until it is closed
 # denseAutoencoder.plot_training_loss()
 
@@ -119,7 +116,7 @@ sg = SegmentAE(ae_model=denseAutoencoder, cl_model=cl_model)
 
 sg.reconstruction(
     input_data=X_train,
-    threshold_metric="mse",  # || "mse", "mae", "rmse", "max_error" - Enum prevents typos
+    threshold_metric="mse",  # "mse", "mae", "rmse", "max_error"
 )
 
 # Baseline threshold of each cluster (mean training reconstruction error)
@@ -133,7 +130,6 @@ results = sg.evaluation(
     threshold_ratio=0.75,  # Adjusts the anomaly detection sensitivity relative to baseline threshold
 )
 
-# Access detailed metadata
 preds_test = sg.preds_test
 recon_metrics_test = sg.reconstruction_test
 
@@ -164,7 +160,6 @@ predictions = sg.detections(input_data=X_future_data, threshold_ratio=best_ratio
 # Every row comes with its verdict, cluster, anomaly score and threshold
 print(predictions[["Predicted Anomalies", "Cluster", "Reconstruction Error", "Threshold"]].head())
 
-# Use the new metrics module for evaluation
 final_metrics = metrics_classification(
     y_true=y_future_data, y_pred=predictions["Predicted Anomalies"]
 )

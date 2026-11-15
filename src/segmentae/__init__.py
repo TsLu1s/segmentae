@@ -19,10 +19,7 @@ from segmentae._version import __version__
 
 __author__ = "Luís Fernando da Silva Santos"
 
-# Clustering
 from segmentae.clusters import Clustering, ClusterRegistry
-
-# Core components
 from segmentae.core import (
     ClusterModel,
     EncoderType,
@@ -32,20 +29,10 @@ from segmentae.core import (
     ScalerType,
     ThresholdMetric,
 )
-
-# Data Sources
 from segmentae.data_sources import load_dataset
-
-# Metrics
 from segmentae.metrics import metrics_classification, metrics_regression
-
-# Optimization
 from segmentae.optimization import SegmentAE_Optimizer
-
-# Pipeline
 from segmentae.pipeline import SegmentAE
-
-# Preprocessing
 from segmentae.processing.preprocessing import Preprocessing
 
 if TYPE_CHECKING:  # make the lazily loaded names visible to type checkers and IDEs
@@ -65,9 +52,7 @@ _LAZY_ATTRIBUTES = {
 
 
 def __getattr__(name: str):
-    if (
-        name == "autoencoders"
-    ):  # the subpackage itself, e.g. segmentae.autoencoders.DenseAutoencoder
+    if name == "autoencoders":  # the subpackage, e.g. segmentae.autoencoders.DenseAutoencoder
         return import_module("segmentae.autoencoders")
     if name in _LAZY_ATTRIBUTES:
         value = getattr(import_module(_LAZY_ATTRIBUTES[name]), name)
@@ -81,10 +66,8 @@ def __dir__():
 
 
 __all__ = [
-    # Version info
     "__version__",
     "__author__",
-    # Core enums
     "PhaseType",
     "ClusterModel",
     "ThresholdMetric",
@@ -92,18 +75,14 @@ __all__ = [
     "EncoderType",
     "ScalerType",
     "ImputerType",
-    # Main classes
     "Preprocessing",
     "Clustering",
     "ClusterRegistry",
     "SegmentAE",
     "SegmentAE_Optimizer",
-    # Metrics
     "metrics_classification",
     "metrics_regression",
-    # Data
     "load_dataset",
-    # Autoencoders
     "DenseAutoencoder",
     "BatchNormAutoencoder",
     "EnsembleAutoencoder",

@@ -53,7 +53,6 @@ class ClusterRegistry:
         """
         key = cls._key(model_type)
 
-        # Validate that model_class implements AbstractClusterModel
         if not (isinstance(model_class, type) and issubclass(model_class, AbstractClusterModel)):
             raise ConfigurationError("Model class must inherit from AbstractClusterModel")
 

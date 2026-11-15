@@ -118,7 +118,6 @@ def build_autoencoder(
     """
     input_layer = Input(shape=(input_dim,))
 
-    # Encoder layers
     encoded = input_layer
     for dim in hidden_dims:
         encoded = Dense(dim, activation=encoder_activation)(encoded)
@@ -126,7 +125,6 @@ def build_autoencoder(
             encoded = BatchNormalization()(encoded)
         encoded = Dropout(dropout_rate)(encoded)
 
-    # Decoder layers
     decoded = encoded
     for dim in reversed(hidden_dims[:-1]):
         decoded = Dense(dim, activation=decoder_activation)(decoded)
@@ -305,8 +303,8 @@ class BaseAutoencoder:
     def __init__(
         self,
         hidden_dims: Optional[List[int]] = None,
-        encoder_activation: str = "relu",  # Activation function for encoder layers
-        decoder_activation: str = "relu",  # Activation function for decoder layers
+        encoder_activation: str = "relu",
+        decoder_activation: str = "relu",
         optimizer: str = "adam",
         learning_rate: float = 0.001,
         epochs: int = 300,
@@ -377,7 +375,6 @@ class BaseAutoencoder:
         )
         train = to_float_array(input_data, "Training data")
 
-        # Get input dimension
         self.input_dim = train.shape[1]
 
         warn_if_overparameterized(self.hidden_dims, self.input_dim)
@@ -386,7 +383,6 @@ class BaseAutoencoder:
         if self.random_state is not None:
             keras.utils.set_random_seed(self.random_state)
 
-        # Create and compile the model
         self.autoencoder = build_autoencoder(
             input_dim=self.input_dim,
             hidden_dims=self.hidden_dims,
@@ -399,7 +395,6 @@ class BaseAutoencoder:
             output_activation=self.output_activation,
         )
 
-        # Train the model
         self.history = train_autoencoder(
             autoencoder=self.autoencoder,
             train=train,

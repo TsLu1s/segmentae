@@ -47,7 +47,6 @@ class Clustering:
         if cluster_model is None:
             cluster_model = ["KMeans"]
 
-        # Validate and store configuration
         self.config = ClusteringConfig(
             cluster_models=cluster_model,
             n_clusters=n_clusters,
@@ -62,7 +61,6 @@ class Clustering:
         self.random_state = self.config.random_state
         self.covariance_type = self.config.covariance_type
 
-        # Internal state
         self._fitted_models: Dict[str, AbstractClusterModel] = {}
         self._feature_names: Optional[List] = None
         self._is_fitted: bool = False
@@ -112,7 +110,6 @@ class Clustering:
             index=X.index,
         )
 
-    # Private methods
     def _create_model(self, model_name: str) -> AbstractClusterModel:
         """
         Create a clustering model instance with appropriate parameters.
@@ -143,7 +140,6 @@ class Clustering:
                 "Call clustering_fit(X) method first.",
             )
 
-    # Properties for accessing fitted models
     @property
     def fitted_models(self) -> Dict[str, AbstractClusterModel]:
         """Get dictionary of fitted clustering models."""
