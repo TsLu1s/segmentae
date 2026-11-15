@@ -114,7 +114,6 @@ class TestPreprocessing:
 
         assert isinstance(transformed, pd.DataFrame)
         assert len(pr.cat_cols) == 2
-        # All columns should be numerical after encoding
         assert transformed.select_dtypes(include=["object", "category"]).shape[1] == 0
 
     def test_repr(self):

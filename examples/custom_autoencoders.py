@@ -48,9 +48,9 @@ X_future_data = future_data.drop(columns=[target]).copy()
 # of the autoencoder below can reconstruct. With "StandardScaler" or
 # "RobustScaler", end the decoder with a linear layer instead.
 pr = Preprocessing(
-    encoder="IFrequencyEncoder",  # "LabelEncoder", "OneHotEncoder" || #EncoderType.IFREQUENCY,
-    scaler="MinMaxScaler",  # "StandardScaler", "RobustScaler"  || #ScalerType.MINMAX,
-    imputer=None,  # Optional Imputation
+    encoder="IFrequencyEncoder",  # "LabelEncoder", "OneHotEncoder"
+    scaler="MinMaxScaler",  # "StandardScaler", "RobustScaler"
+    imputer=None,
 )
 
 pr.fit(X=X_train)
@@ -64,7 +64,6 @@ X_future_data = pr.transform(X=X_future_data)
 print("Num GPUs Available: ", len(tf.config.list_physical_devices("GPU")))
 print(f"Input shape: {X_train.shape[1]}")
 
-# Define the encoder
 encoder = Sequential(
     [
         Input(shape=(X_train.shape[1],)),
@@ -75,7 +74,6 @@ encoder = Sequential(
     ]
 )
 
-# Define the decoder
 decoder = Sequential(
     [
         Input(shape=(8,)),
@@ -86,13 +84,10 @@ decoder = Sequential(
     ]
 )
 
-# Combine encoder and decoder into an autoencoder model
 autoencoder = Sequential([encoder, decoder])
 
-# Compile the model
 autoencoder.compile(optimizer="adam", loss="mse")
 
-# Train the model
 autoencoder.fit(X_train, X_train, epochs=50, batch_size=None, validation_split=0.1)
 
 ############################################################################################
@@ -113,17 +108,15 @@ sg = SegmentAE(ae_model=autoencoder, cl_model=cl_model)
 
 ### Train Reconstruction
 
-# Using ThresholdMetric Enum
 sg.reconstruction(
     input_data=X_train,
-    threshold_metric="mse",  # || "mse", "mae", "rmse", "max_error"
+    threshold_metric="mse",  # "mse", "mae", "rmse", "max_error"
 )
 
 ### Reconstruction Error Result Performance
 
 results = sg.evaluation(input_data=X_test, target_col=y_test, threshold_ratio=2.0)
 
-# Access metadata by cluster
 preds_test, recon_metrics_test = sg.preds_test, sg.reconstruction_test
 
 print(f"Evaluation Results:\n{results['global metrics']}")

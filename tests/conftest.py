@@ -63,7 +63,6 @@ def sample_data_with_nans():
             "num_2": np.random.uniform(0, 10, n_samples),
         }
     )
-    # Inject NaNs
     mask = np.random.random(data.shape) < 0.1
     data = data.mask(mask)
     return data

@@ -72,7 +72,6 @@ class ImputerType(_ValueEnum):
     SIMPLE = "Simple"
 
 
-# Mapping dictionaries
 METRIC_COLUMN_MAP: Dict[ThresholdMetric, str] = {
     ThresholdMetric.MSE: "MSE_Recons_error",
     ThresholdMetric.MAE: "MAE_Recons_error",

@@ -92,22 +92,17 @@ def load_dataset(
     # Binary target: 0 = normal, 1 = anomaly
     data[target] = spec.to_binary(data[target])
 
-    # Separate normal and anomaly instances
     normal = data[data[target] == 0]
     anomaly = data[data[target] == 1]
 
-    # Split normal instances into training and testing sets
     train, test = train_test_split(normal, train_size=split_ratio, random_state=random_state)
 
-    # Combine testing set with anomaly instances and shuffle
     test = pd.concat([test, anomaly])
     test = test.sample(frac=1, random_state=42)
 
-    # Reset index
     train = train.reset_index(drop=True)
     test = test.reset_index(drop=True)
 
-    # Print information
     _print_dataset_info(train, test, target, suggested_split=spec.suggested_split)
 
     return train, test, target
@@ -125,7 +120,6 @@ def _fetch_uci_dataset(uci_id: int) -> pd.DataFrame:
 
     info = fetch_ucirepo(id=uci_id)
 
-    # Concatenate features and targets
     return pd.concat(
         [info.data.features.reset_index(drop=True), info.data.targets.reset_index(drop=True)],
         axis=1,
@@ -142,7 +136,6 @@ def _print_dataset_info(
         "Suggested Split_Ratio": suggested_split,
     }
 
-    # Add target distribution
     for key, value in test[target].value_counts().to_dict().items():
         label = "Anomalies [1]" if key == 1 else "Normal [0]"
         info[label] = value

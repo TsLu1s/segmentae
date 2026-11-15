@@ -75,11 +75,9 @@ class SegmentAE:
             cl_model: Fitted ``Clustering`` instance.
             verbose: Print the per-cluster thresholds during ``evaluation``.
         """
-        # Validate inputs
         self._validate_autoencoder(ae_model)
         self._validate_clustering(cl_model)
 
-        # Store models
         self.ae_model = ae_model
         self.cl_model = cl_model
         self.verbose = verbose
@@ -124,10 +122,6 @@ class SegmentAE:
         self.reconstruction_final: Dict[Any, Dict] = {}
         self.results: Dict = {}
 
-    # ------------------------------------------------------------------ #
-    # Public API
-    # ------------------------------------------------------------------ #
-
     def reconstruction(
         self,
         input_data: pd.DataFrame,
@@ -149,7 +143,6 @@ class SegmentAE:
         Returns:
             The fitted pipeline (for chaining).
         """
-        # Validate and configure
         self._validate_reconstruction_input(input_data, target_col)
         metric = ReconstructionConfig(threshold_metric=threshold_metric).threshold_metric
         metric_column = get_metric_column_name(metric)
@@ -203,7 +196,6 @@ class SegmentAE:
         self._validate_fitted_for_evaluation()
         self._validate_evaluation_input(input_data, target_col)
 
-        # Threshold ratio adjusts the detection sensitivity relative to baseline threshold
         ratio = validate_threshold_ratio(threshold_ratio)
         labels = _align_target(input_data, target_col)
 
@@ -291,10 +283,6 @@ class SegmentAE:
     def threshold_metric(self) -> Optional[ThresholdMetric]:
         """Reconstruction metric the thresholds are based on (None before fitting)."""
         return self._threshold_metric
-
-    # ------------------------------------------------------------------ #
-    # Reconstruction
-    # ------------------------------------------------------------------ #
 
     def _reconstruct(
         self, input_data: pd.DataFrame, target_col: Optional[pd.Series], metric: ThresholdMetric
@@ -398,10 +386,6 @@ class SegmentAE:
         """Get cluster assignments for input data."""
         return self.cl_model.cluster_prediction(X=input_data)
 
-    # ------------------------------------------------------------------ #
-    # Thresholding
-    # ------------------------------------------------------------------ #
-
     def _resolve_thresholds(self, cluster_ids: Iterable, ratio: float) -> Dict[Any, float]:
         """
         Threshold for each cluster present in the data being scored.
@@ -440,10 +424,6 @@ class SegmentAE:
         """1 for rows whose reconstruction error exceeds their cluster threshold, else 0."""
         row_thresholds = self._row_thresholds(result.labels, thresholds)
         return (result.scores > row_thresholds).astype("int64")
-
-    # ------------------------------------------------------------------ #
-    # Evaluation
-    # ------------------------------------------------------------------ #
 
     def _build_evaluation_results(
         self,
@@ -486,7 +466,6 @@ class SegmentAE:
             index = index.rename("index")
         ytpred = pd.DataFrame({"y_test": y_true, "Predicted Anomalies": y_pred}, index=index)
 
-        # Global metrics
         global_metrics = metrics_classification(y_true, y_pred)
         global_metrics["Threshold Metric"] = metric_name
         global_metrics["Threshold Ratio"] = threshold_ratio
@@ -497,10 +476,6 @@ class SegmentAE:
             "confusion matrix": confusion_matrices,
             "y_true vs y_pred": ytpred,
         }
-
-    # ------------------------------------------------------------------ #
-    # Validation
-    # ------------------------------------------------------------------ #
 
     def _validate_autoencoder(self, ae_model: Any) -> None:
         """Validate that autoencoder has required interface."""

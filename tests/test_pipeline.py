@@ -202,33 +202,26 @@ class TestEndToEnd:
         """Test the complete reconstruction -> evaluation -> detection flow."""
         target = binary_target[: len(scaled_data)]
 
-        # Split data
         train = scaled_data.iloc[:150].reset_index(drop=True)
         test = scaled_data.iloc[150:].reset_index(drop=True)
         y_test = target.iloc[150:].reset_index(drop=True)
 
-        # Train autoencoder
         ae = DenseAutoencoder(hidden_dims=[8, 4], epochs=10, stopping_patient=5)
         ae.fit(train)
 
-        # Fit clustering
         cl = Clustering(cluster_model=["KMeans"], n_clusters=2)
         cl.clustering_fit(train)
 
-        # Create pipeline
         sg = SegmentAE(ae_model=ae, cl_model=cl)
 
-        # Reconstruction
         sg.reconstruction(input_data=train, threshold_metric="mse")
         assert sg._is_reconstruction_fitted
 
-        # Evaluation
         results = sg.evaluation(input_data=test, target_col=y_test, threshold_ratio=2.0)
         assert "global metrics" in results
         accuracy = results["global metrics"]["Accuracy"].iloc[0]
         assert 0 <= accuracy <= 1
 
-        # Detection
         predictions = sg.detections(input_data=test, threshold_ratio=2.0)
         assert len(predictions) == len(test)
         assert "Predicted Anomalies" in predictions.columns

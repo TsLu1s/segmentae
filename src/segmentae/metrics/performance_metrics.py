@@ -28,19 +28,15 @@ def metrics_classification(y_true: ArrayLike, y_pred: ArrayLike) -> pd.DataFrame
     Returns:
         DataFrame containing accuracy, precision, recall, and F1 score metrics
     """
-    # Validate inputs
     _validate_inputs(y_true, y_pred)
 
-    # Calculate metrics with zero_division handling
     accuracy = accuracy_score(y_true, y_pred)
     precision = precision_score(y_true, y_pred, zero_division=0)
     recall = recall_score(y_true, y_pred, zero_division=0)
     f1 = f1_score(y_true, y_pred, zero_division=0)
 
-    # Create metrics dictionary
     metrics = {"Accuracy": accuracy, "Precision": precision, "Recall": recall, "F1 Score": f1}
 
-    # Convert to DataFrame
     return pd.DataFrame(metrics, index=[0])
 
 
@@ -51,17 +47,14 @@ def metrics_regression(y_true: ArrayLike, y_pred: ArrayLike) -> pd.DataFrame:
     Returns:
         DataFrame containing MAE, MSE, RMSE, R², and Max Error metrics
     """
-    # Validate inputs
     _validate_inputs(y_true, y_pred)
 
-    # Calculate metrics
     mae = mean_absolute_error(y_true, y_pred)
     mse = mean_squared_error(y_true, y_pred)
     rmse = float(np.sqrt(mse))
     r2 = r2_score(y_true, y_pred)
     maxerror = max_error(y_true, y_pred)
 
-    # Create metrics dictionary
     metrics = {
         "Mean Absolute Error": mae,
         "Mean Squared Error": mse,
@@ -70,7 +63,6 @@ def metrics_regression(y_true: ArrayLike, y_pred: ArrayLike) -> pd.DataFrame:
         "Max Error": maxerror,
     }
 
-    # Convert to DataFrame
     return pd.DataFrame(metrics, index=[0])
 
 

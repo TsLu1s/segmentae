@@ -106,7 +106,6 @@ def compute_column_metrics(
     )
     mse = np.mean(np.square(abs_diff), axis=0)
 
-    # Calculate per-column metrics
     col_metrics = pd.DataFrame(
         {
             "Column": columns,
@@ -118,7 +117,6 @@ def compute_column_metrics(
         }
     )
 
-    # Add total metrics row
     total_metrics = pd.DataFrame(
         {
             "Column": ["Total Metrics"],

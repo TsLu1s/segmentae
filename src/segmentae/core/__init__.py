@@ -32,7 +32,6 @@ from segmentae.core.types import (
 )
 
 __all__ = [
-    # Constants
     "PhaseType",
     "ClusterModel",
     "ThresholdMetric",
@@ -44,7 +43,6 @@ __all__ = [
     "get_metric_column_name",
     "parse_threshold_metric",
     "parse_performance_metric",
-    # Exceptions
     "SegmentAEError",
     "ClusteringError",
     "ReconstructionError",
@@ -52,10 +50,8 @@ __all__ = [
     "ModelNotFittedError",
     "ConfigurationError",
     "AutoencoderError",
-    # Base Classes
     "AbstractClusterModel",
     "AbstractPreprocessor",
-    # Types
     "DataFrame",
     "Series",
     "NDArray",

@@ -350,7 +350,6 @@ def normalize_cluster_model_name(model: Union[ClusterModel, str]) -> str:
     return name
 
 
-# Auto-register all clustering models
 ClusterRegistry.register(ClusterModel.KMEANS, KMeansCluster, override=True)
 ClusterRegistry.register(ClusterModel.MINIBATCH_KMEANS, MiniBatchKMeansCluster, override=True)
 ClusterRegistry.register(ClusterModel.GMM, GaussianMixtureCluster, override=True)

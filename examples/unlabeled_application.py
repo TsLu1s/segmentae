@@ -70,7 +70,6 @@ print(f"Clustering completed: {cl_model.n_clusters} clusters identified")
 
 print(f"Num GPUs Available: {len(tf.config.list_physical_devices('GPU'))}")
 
-# DenseAutoencoder with architecture optimized for reconstruction
 denseAutoencoder = DenseAutoencoder(
     hidden_dims=[16, 12, 8, 4],  # Bottleneck architecture
     encoder_activation="relu",
@@ -83,14 +82,12 @@ denseAutoencoder = DenseAutoencoder(
     stopping_patient=10,  # Early stopping
     dropout_rate=0.1,
     batch_size=None,
-    random_state=42,  # Reproducible training
+    random_state=42,
 )
 
-# Train autoencoder on unlabeled data
 denseAutoencoder.fit(input_data=X_train)
 print("Autoencoder training completed")
 
-# Display model information
 denseAutoencoder.summary()
 # Training visualization (opt-in): opens a window that pauses the script until it is closed
 # denseAutoencoder.plot_training_loss()
@@ -121,7 +118,7 @@ sg = SegmentAE(ae_model=denseAutoencoder, cl_model=cl_model)
 
 sg.reconstruction(
     input_data=X_train,
-    threshold_metric="mse",  # || "mse", "mae", "rmse", "max_error" - Can also use MAE, RMSE, or MAX_ERROR
+    threshold_metric="mse",  # "mse", "mae", "rmse", "max_error"
 )
 
 # Access reconstruction metadata (dict keyed by cluster id)
