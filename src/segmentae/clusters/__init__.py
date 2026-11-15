@@ -1,6 +1,5 @@
 from segmentae.clusters.clustering import Clustering, ClusteringConfig
 from segmentae.clusters.models import (
-    AgglomerativeCluster,
     GaussianMixtureCluster,
     KMeansCluster,
     MiniBatchKMeansCluster,
@@ -14,5 +13,4 @@ __all__ = [
     "KMeansCluster",
     "MiniBatchKMeansCluster",
     "GaussianMixtureCluster",
-    "AgglomerativeCluster",
 ]

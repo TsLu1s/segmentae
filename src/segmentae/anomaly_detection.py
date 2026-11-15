@@ -1,3 +1,9 @@
+"""
+Backward-compatible import location for the main SegmentAE components.
+
+Prefer importing from the package root (``from segmentae import SegmentAE``).
+"""
+
 from segmentae.autoencoders.batch_norm import BatchNormAutoencoder
 from segmentae.autoencoders.dense import DenseAutoencoder
 from segmentae.autoencoders.ensemble import EnsembleAutoencoder

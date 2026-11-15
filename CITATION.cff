@@ -3,11 +3,8 @@ message: "If you use this Python package, please cite it as below."
 authors:
 - family-names: "Santos"
   given-names: "Luís"
-  orcid: "https://orcid:0000-0002-4121-1133"
+  orcid: "https://orcid.org/0000-0002-4121-1133"
 title: "SegmentAE: A Python Library for Anomaly Detection Optimization"
-version: 1.0.0
-doi: ""
+version: 2.0.0
 date-released: 2024-06-19
 url: "https://pypi.org/project/segmentae/"
-
-

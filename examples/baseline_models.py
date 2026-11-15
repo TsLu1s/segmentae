@@ -1,17 +1,21 @@
-import warnings
-from sklearn.model_selection import train_test_split
+"""
+SegmentAE Example: Built-in Autoencoder Models
+==============================================
+
+This example demonstrates the complete SegmentAE workflow with the built-in
+DenseAutoencoder: preprocessing, clustering, training, evaluation over several
+threshold ratios and anomaly detection on new data.
+"""
 
 import pandas as pd
 import tensorflow as tf
+from sklearn.model_selection import train_test_split
 
 from segmentae import Clustering, SegmentAE
 from segmentae.autoencoders import DenseAutoencoder  # , BatchNormAutoencoder
 from segmentae.data_sources import load_dataset
 from segmentae.metrics import metrics_classification
 from segmentae.processing.preprocessing import Preprocessing
-
-warnings.filterwarnings("ignore")
-
 
 ############################################################################################
 ### Data Loading
@@ -23,7 +27,8 @@ train, test, target = load_dataset(
 
 test, future_data = train_test_split(test, train_size=0.9, random_state=5)
 
-# Resetting Index
+# Resetting the index is optional: rows are handled by position and results
+# keep the index of the data they were computed from
 train = train.reset_index(drop=True)
 test = test.reset_index(drop=True)
 future_data = future_data.reset_index(drop=True)
@@ -36,9 +41,12 @@ y_future_data = future_data[target].astype(int)
 ############################################################################################
 ### Preprocessing with Enhanced Validation
 
+# MinMaxScaler maps the features to [0, 1], the range a sigmoid output layer can
+# reconstruct. With "StandardScaler" or "RobustScaler", build the autoencoder
+# with output_activation="linear" instead.
 pr = Preprocessing(
     encoder="IFrequencyEncoder",  # "LabelEncoder", "OneHotEncoder"
-    scaler="StandardScaler",  # "MinMaxScaler", "RobustScaler"
+    scaler="MinMaxScaler",  # "StandardScaler", "RobustScaler"
     imputer=None,
 )
 
@@ -51,7 +59,7 @@ X_future_data = pr.transform(X=X_future_data)
 ### Clustering Implementation with Registry Pattern
 
 cl_model = Clustering(
-    cluster_model=["KMeans"],  # "KMeans", "MiniBatchKMeans", "GMM", "Agglomerative"
+    cluster_model=["KMeans"],  # "KMeans", "MiniBatchKMeans", "GMM"
     n_clusters=3,
 )
 cl_model.clustering_fit(X=X_train)
@@ -59,13 +67,14 @@ cl_model.clustering_fit(X=X_train)
 ############################################################################################
 ### Built-in Autoencoder Implementation
 
-print("Num GPUs Available: ", len(tf.config.experimental.list_physical_devices("GPU")))
+print("Num GPUs Available: ", len(tf.config.list_physical_devices("GPU")))
 
 # DenseAutoencoder with comprehensive configuration
 denseAutoencoder = DenseAutoencoder(
     hidden_dims=[16, 8, 4],  # Architecture definition
     encoder_activation="relu",
     decoder_activation="relu",
+    output_activation="sigmoid",  # matches MinMax-scaled data
     optimizer="adam",
     learning_rate=0.001,
     epochs=150,
@@ -73,6 +82,7 @@ denseAutoencoder = DenseAutoencoder(
     stopping_patient=10,  # Early stopping
     dropout_rate=0.1,  # Regularization
     batch_size=None,
+    random_state=42,  # Reproducible training
 )
 
 # Fit the autoencoder
@@ -80,7 +90,8 @@ denseAutoencoder.fit(input_data=X_train)
 
 # Model inspection methods
 denseAutoencoder.summary()  # Model architecture
-denseAutoencoder.plot_training_loss()  # Training visualization
+# Training visualization (opt-in): opens a window that pauses the script until it is closed
+# denseAutoencoder.plot_training_loss()
 
 # Alternative: BatchNormAutoencoder for better convergence
 """
@@ -110,6 +121,9 @@ sg.reconstruction(
     input_data=X_train,
     threshold_metric="mse",  # || "mse", "mae", "rmse", "max_error" - Enum prevents typos
 )
+
+# Baseline threshold of each cluster (mean training reconstruction error)
+print(f"Cluster thresholds: {sg.thresholds}")
 
 ### Reconstruction Error Result Performance
 
@@ -147,13 +161,14 @@ best_ratio = global_results.sort_values(by="Accuracy", ascending=False).iloc[0][
 
 predictions = sg.detections(input_data=X_future_data, threshold_ratio=best_ratio)
 
+# Every row comes with its verdict, cluster, anomaly score and threshold
+print(predictions[["Predicted Anomalies", "Cluster", "Reconstruction Error", "Threshold"]].head())
+
 # Use the new metrics module for evaluation
 final_metrics = metrics_classification(
     y_true=y_future_data, y_pred=predictions["Predicted Anomalies"]
 )
 
 print("\nFinal Performance Metrics:")
-print(f"Accuracy: {final_metrics['Accuracy']}")
-print(f"Precision: {final_metrics['Precision']}")
-print(f"Recall: {final_metrics['Recall']}")
-print(f"F1 Score: {final_metrics['F1 Score']}")
+for metric in final_metrics.columns:
+    print(f"{metric}: {final_metrics[metric].iloc[0]:.4f}")

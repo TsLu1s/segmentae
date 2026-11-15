@@ -1,7 +1,18 @@
-import warnings
+"""
+SegmentAE Example: Grid Search Optimization
+===========================================
+
+This example demonstrates how to use SegmentAE_Optimizer to search over
+autoencoders, clustering algorithms, numbers of clusters and threshold ratios.
+
+The labeled data is split in two: a validation set, used by the optimizer to
+select the best configuration, and a hold-out set that the search never sees,
+used to report the final performance.
+"""
 
 import tensorflow as tf
-from tensorflow.keras.layers import Dense
+from sklearn.model_selection import train_test_split
+from tensorflow.keras.layers import Dense, Input
 from tensorflow.keras.models import Sequential
 
 from segmentae.autoencoders import EnsembleAutoencoder
@@ -9,9 +20,6 @@ from segmentae.data_sources import load_dataset
 from segmentae.metrics import metrics_classification
 from segmentae.optimization import SegmentAE_Optimizer
 from segmentae.processing.preprocessing import Preprocessing
-
-warnings.filterwarnings("ignore")
-
 
 ############################################################################################
 ### Data Loading
@@ -21,24 +29,30 @@ train, test, target = load_dataset(
     split_ratio=0.75,
 )
 
+# Validation set: selects the configuration || Hold-out set: final, unbiased evaluation
+valid, holdout = train_test_split(test, train_size=0.6, random_state=5, stratify=test[target])
+
 X_train = train.drop(columns=[target]).copy()
-X_test = test.drop(columns=[target]).copy()
-y_test = test[target].astype(int)
+X_valid, y_valid = valid.drop(columns=[target]).copy(), valid[target].astype(int)
+X_holdout, y_holdout = holdout.drop(columns=[target]).copy(), holdout[target].astype(int)
 
 ############################################################################################
 ### Preprocessing with Type Safety and Validation
 
+# MinMaxScaler maps the features to [0, 1], the range a sigmoid output layer can
+# reconstruct. With "StandardScaler" or "RobustScaler", use linear output layers.
 pr = Preprocessing(
     encoder="IFrequencyEncoder",  # "LabelEncoder", "OneHotEncoder"
-    scaler="StandardScaler",  # "MinMaxScaler", "RobustScaler"
+    scaler="MinMaxScaler",  # "StandardScaler", "RobustScaler"
     imputer=None,
 )
 
 pr.fit(X=X_train)
 X_train = pr.transform(X=X_train)
-X_test = pr.transform(X=X_test)
+X_valid = pr.transform(X=X_valid)
+X_holdout = pr.transform(X=X_holdout)
 
-print("Num GPUs Available: ", len(tf.config.experimental.list_physical_devices("GPU")))
+print("Num GPUs Available: ", len(tf.config.list_physical_devices("GPU")))
 
 ############################################################################################
 ### AutoEncoder Model: Ensemble Autoencoder
@@ -57,6 +71,7 @@ ensembleAutoencoder = EnsembleAutoencoder(
     dropout_rates=[0.1, 0.2, 0.3],
     batch_sizes=[None, None, 128],
     use_batch_norm=[False, False, False],
+    random_state=42,  # Reproducible training
 )
 
 # Train the ensemble
@@ -69,7 +84,8 @@ print("Ensemble autoencoder trained successfully!")
 # Define encoder architecture
 encoder = Sequential(
     [
-        Dense(32, activation="relu", input_shape=(X_train.shape[1],)),
+        Input(shape=(X_train.shape[1],)),
+        Dense(32, activation="relu"),
         Dense(24, activation="relu"),
         Dense(16, activation="relu"),
         Dense(8, activation="relu"),
@@ -79,7 +95,8 @@ encoder = Sequential(
 # Define decoder architecture
 decoder = Sequential(
     [
-        Dense(16, activation="relu", input_shape=(8,)),
+        Input(shape=(8,)),
+        Dense(16, activation="relu"),
         Dense(24, activation="relu"),
         Dense(32, activation="relu"),
         Dense(X_train.shape[1], activation="sigmoid"),
@@ -104,9 +121,12 @@ optimizer = SegmentAE_Optimizer(
     cluster_models=["KMeans", "MiniBatchKMeans", "GMM"],
     threshold_ratios=[1, 1.5, 2, 4],
     performance_metric="Accuracy",
+    verbose=True,  # Set to False to silence the progress output
 )
 
 # Using Enums as input parameters (recommended for new code)
+# from segmentae.core import ClusterModel, PerformanceMetric
+#
 # optimizer = SegmentAE_Optimizer(
 #     autoencoder_models=[ensembleAutoencoder, basicAutoencoder],
 #     n_clusters_list=[1, 2, 3],
@@ -115,19 +135,19 @@ optimizer = SegmentAE_Optimizer(
 #     performance_metric=PerformanceMetric.ACCURACY
 # )
 
-# Run optimization
+# Run optimization: configurations are scored on the validation set
 print("\nRunning grid search optimization...")
-sg = optimizer.optimize(X_train, X_test, y_test)
+sg = optimizer.optimize(X_train, X_valid, y_valid)
 
 # Access optimization results
-preds_test = sg.preds_test
-recon_metrics_test = sg.reconstruction_test
+preds_valid = sg.preds_test
+recon_metrics_valid = sg.reconstruction_test
 leaderboard = optimizer.leaderboard
 
 print("\n" + "=" * 50)
 print("OPTIMIZATION RESULTS")
 print("=" * 50)
-print(f"\nBest Performance: {optimizer.best_performance:.4f}")
+print(f"\nBest Validation Performance: {optimizer.best_performance:.4f}")
 print("Best Configuration:")
 print(f"  - Model: {optimizer.best_model}")
 print(f"  - Clusters: {optimizer.best_n_clusters}")
@@ -141,10 +161,11 @@ print(leaderboard.head(10).to_string())
 
 threshold = optimizer.best_threshold_ratio
 
-predictions = sg.detections(input_data=X_test, threshold_ratio=threshold)
+# Hold-out data was not used to select the configuration
+predictions = sg.detections(input_data=X_holdout, threshold_ratio=threshold)
 
 # Calculate final metrics
-final_metrics = metrics_classification(y_test, predictions["Predicted Anomalies"])
-print("\nFinal Test Performance:")
-for metric, value in final_metrics.items():
-    print(f"  {metric}: {value:.4f}")
+final_metrics = metrics_classification(y_holdout, predictions["Predicted Anomalies"])
+print("\nFinal Hold-out Performance:")
+for metric in final_metrics.columns:
+    print(f"  {metric}: {final_metrics[metric].iloc[0]:.4f}")

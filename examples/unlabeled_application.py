@@ -13,16 +13,12 @@ Features demonstrated:
 - Optional ground truth evaluation
 """
 
-import warnings
-
+import pandas as pd
 import tensorflow as tf
 
 from segmentae import Clustering, Preprocessing, SegmentAE
 from segmentae.autoencoders import DenseAutoencoder  # , BatchNormAutoencoder
 from segmentae.data_sources import load_dataset
-
-warnings.filterwarnings("ignore")
-
 
 ############################################################################################
 ### Data Loading (Unlabeled Scenario)
@@ -31,10 +27,6 @@ train, future_data, target = load_dataset(
     dataset_selection="htru2_dataset",  # Options: 'default_credit_card', 'htru2_dataset', 'shuttle_148'
     split_ratio=0.75,
 )
-
-# Reset indices
-train = train.reset_index(drop=True)
-future_data = future_data.reset_index(drop=True)
 
 # For unlabeled scenario, it is not used the target column
 X_train = train.drop(columns=[target]).copy()
@@ -47,9 +39,12 @@ X_future_data = future_data.drop(columns=[target]).copy()
 ############################################################################################
 ### Preprocessing with Enhanced Error Handling
 
+# MinMaxScaler maps the features to [0, 1], the range a sigmoid output layer can
+# reconstruct. With "StandardScaler" or "RobustScaler", build the autoencoder
+# with output_activation="linear" instead.
 pr = Preprocessing(
     encoder="IFrequencyEncoder",  # "LabelEncoder", "OneHotEncoder"
-    scaler="StandardScaler",  # "MinMaxScaler", "RobustScaler"
+    scaler="MinMaxScaler",  # "StandardScaler", "RobustScaler"
     imputer=None,
 )
 
@@ -62,7 +57,7 @@ X_future_data = pr.transform(X=X_future_data)
 
 # KMeans clustering for hard assignments
 cl_model = Clustering(
-    cluster_model=["KMeans"],  # "KMeans", "MiniBatchKMeans", "GMM", "Agglomerative"
+    cluster_model=["KMeans"],  # "KMeans", "MiniBatchKMeans", "GMM"
     n_clusters=3,
     covariance_type="full",  # GMM-specific parameter
 )
@@ -73,13 +68,14 @@ print(f"Clustering completed: {cl_model.n_clusters} clusters identified")
 ############################################################################################
 ### Autoencoder Implementation for Unlabeled Data
 
-print(f"Num GPUs Available: {len(tf.config.experimental.list_physical_devices('GPU'))}")
+print(f"Num GPUs Available: {len(tf.config.list_physical_devices('GPU'))}")
 
 # DenseAutoencoder with architecture optimized for reconstruction
 denseAutoencoder = DenseAutoencoder(
     hidden_dims=[16, 12, 8, 4],  # Bottleneck architecture
     encoder_activation="relu",
     decoder_activation="relu",
+    output_activation="sigmoid",  # matches MinMax-scaled data
     optimizer="adam",
     learning_rate=0.001,
     epochs=150,
@@ -87,6 +83,7 @@ denseAutoencoder = DenseAutoencoder(
     stopping_patient=10,  # Early stopping
     dropout_rate=0.1,
     batch_size=None,
+    random_state=42,  # Reproducible training
 )
 
 # Train autoencoder on unlabeled data
@@ -95,7 +92,8 @@ print("Autoencoder training completed")
 
 # Display model information
 denseAutoencoder.summary()
-denseAutoencoder.plot_training_loss()
+# Training visualization (opt-in): opens a window that pauses the script until it is closed
+# denseAutoencoder.plot_training_loss()
 
 # Alternative: BatchNormAutoencoder for improved stability
 """
@@ -126,16 +124,24 @@ sg.reconstruction(
     threshold_metric="mse",  # || "mse", "mae", "rmse", "max_error" - Can also use MAE, RMSE, or MAX_ERROR
 )
 
-# Access reconstruction metadata
+# Access reconstruction metadata (dict keyed by cluster id)
 preds_train = sg.preds_train
 recon_metrics_train = sg.reconstruction_eval
+
+# Aggregate per-row reconstruction errors across all clusters
+metric_col = "MSE_Recons_error"  # matches threshold_metric="mse"
+all_errors = pd.concat(
+    [recon_metrics_train[cluster_id]["metrics"][metric_col] for cluster_id in recon_metrics_train]
+)
 
 print("\n" + "=" * 50)
 print("RECONSTRUCTION ANALYSIS")
 print("=" * 50)
-print(f"Reconstruction threshold: {sg.threshold:.6f}")
-print(f"Mean reconstruction error: {recon_metrics_train['mse'].mean():.6f}")
-print(f"Std reconstruction error: {recon_metrics_train['mse'].std():.6f}")
+print(f"Mean reconstruction error: {all_errors.mean():.6f}")
+print(f"Std reconstruction error: {all_errors.std():.6f}")
+print("Baseline threshold per cluster (mean training error):")
+for cluster_id, threshold in sg.thresholds.items():
+    print(f"  Cluster {cluster_id}: {threshold:.6f}")
 
 ############################################################################################
 ### Anomaly Detection on Unlabeled Future Data
@@ -154,6 +160,14 @@ print("=" * 50)
 print(f"Threshold ratio: {threshold_ratio}")
 print(f"Anomalies detected: {n_anomalies} / {len(predictions)}")
 print(f"Anomaly rate: {anomaly_rate:.2%}")
+
+# Every row comes with its anomaly score and the threshold it was compared against,
+# so the most anomalous samples can be ranked without labels
+print("\nMost anomalous samples (score relative to the cluster threshold):")
+ranked = predictions.assign(
+    Score_Ratio=predictions["Reconstruction Error"] / predictions["Threshold"]
+).sort_values("Score_Ratio", ascending=False)
+print(ranked[["Cluster", "Reconstruction Error", "Threshold", "Score_Ratio"]].head())
 
 # Cluster-wise analysis
 cluster_analysis = predictions.groupby("Cluster")["Predicted Anomalies"].agg(
@@ -174,8 +188,8 @@ actual_metrics = metrics_classification(
     y_pred=predictions['Predicted Anomalies']
 )
 print("\nActual Performance (if ground truth available):")
-for metric, value in actual_metrics.items():
-    print(f"  {metric}: {value:.4f}")
+for metric in actual_metrics.columns:
+    print(f"  {metric}: {actual_metrics[metric].iloc[0]:.4f}")
 """
 
 ############################################################################################
