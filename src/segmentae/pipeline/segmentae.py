@@ -1,33 +1,51 @@
+import inspect
 import warnings
-from typing import Any, Dict, Optional, Union
+from dataclasses import dataclass
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+import numpy as np
 import pandas as pd
 from sklearn.metrics import confusion_matrix
 
 from segmentae.clusters.clustering import Clustering
-from segmentae.core.constants import (
-    PhaseType,
-    ThresholdMetric,
-    get_metric_column_name,
-)
+from segmentae.core.constants import ThresholdMetric, get_metric_column_name
 from segmentae.core.exceptions import (
     AutoencoderError,
     ConfigurationError,
     ModelNotFittedError,
     ValidationError,
 )
+from segmentae.core.types import AutoencoderProtocol
 from segmentae.metrics.performance_metrics import metrics_classification
-from segmentae.pipeline.reconstruction import (
+from segmentae.pipeline.reconstruction import (  # noqa: F401  (EvaluationConfig is re-exported)
     EvaluationConfig,
     ReconstructionConfig,
     compute_column_metrics,
     compute_reconstruction_errors,
-    compute_threshold,
     create_metrics_dataframe,
-    detect_anomalies,
+)
+from segmentae.utils.validation import (
+    validate_binary_target,
+    validate_columns_match,
+    validate_dataframe,
+    validate_threshold_ratio,
 )
 
-warnings.filterwarnings("ignore", category=Warning)
+# Columns that detections() adds next to the reconstructed features
+_OUTPUT_COLUMNS = ("Predicted Anomalies", "Cluster", "Reconstruction Error", "Threshold")
+
+
+@dataclass
+class _Reconstruction:
+    """Reconstruction of one dataset: per-cluster views plus row-aligned arrays."""
+
+    preds: Dict[Any, Dict]  # per cluster: real values, reconstructions, labels
+    metrics: Dict[Any, Dict]  # per cluster: per-row and per-column error metrics
+    labels: np.ndarray  # cluster assigned to each row (input order)
+    values: np.ndarray  # reconstructed values, shape (n_rows, n_features)
+    scores: np.ndarray  # reconstruction error of each row under the active metric
+    index: pd.Index  # index of the input frame
+    columns: List  # feature columns
 
 
 class SegmentAE:
@@ -42,67 +60,117 @@ class SegmentAE:
     1. Reconstruction: Compute reconstruction errors on training data
     2. Evaluation: Test anomaly detection on labeled test data
     3. Detection: Predict anomalies on unlabeled data
+
+    Rows are always handled by position, so input frames may carry any index
+    (it does not need to be reset) and outputs keep the index of their input.
     """
 
-    def __init__(self, ae_model: Any, cl_model: Clustering):
+    def __init__(self, ae_model: Any, cl_model: Clustering, verbose: bool = True):
         """
         Initialize SegmentAE pipeline.
+
+        Args:
+            ae_model: Trained autoencoder exposing ``predict(X)`` (a built-in
+                autoencoder, a Keras model or any compatible object).
+            cl_model: Fitted ``Clustering`` instance.
+            verbose: Print the per-cluster thresholds during ``evaluation``.
         """
-        # Validate inputs
         self._validate_autoencoder(ae_model)
         self._validate_clustering(cl_model)
 
-        # Store models
         self.ae_model = ae_model
         self.cl_model = cl_model
+        self.verbose = verbose
 
-        # State management
-        self._phase: PhaseType = PhaseType.EVALUATION
-        self._threshold: Optional[float] = None
+        # SegmentAE segments data using a single clustering model. If several were
+        # configured, only the first is used for reconstruction; warn so this is explicit.
+        if len(cl_model.cluster_model) > 1:
+            warnings.warn(
+                f"Clustering was configured with {len(cl_model.cluster_model)} models "
+                f"({cl_model.cluster_model}); SegmentAE only uses the first "
+                f"('{cl_model.cluster_model[0]}') for segmentation.",
+                UserWarning,
+                stacklevel=2,
+            )
+
+        # Training reference (set by reconstruction())
         self._threshold_metric: Optional[ThresholdMetric] = None
         self._metric_column: Optional[str] = None
-
-        # Results storage (for backward compatibility)
-        self.preds_train: Dict[int, Dict] = {}
-        self.preds_test: Dict[int, Dict] = {}
-        self.reconstruction_eval: Dict[int, Dict] = {}
-        self.reconstruction_test: Dict[int, Dict] = {}
-        self.results: Dict = {}
-
-        # Internal state
+        self._feature_names: Optional[List] = None
+        self._base_thresholds: Dict[Any, float] = {}
+        self._global_threshold: Optional[float] = None
         self._is_reconstruction_fitted: bool = False
+
+        # Most recently evaluated test input (object identity), so repeated
+        # evaluation() calls over the same data (e.g. a threshold sweep) don't
+        # recompute the autoencoder reconstruction each time. The reconstruction
+        # depends only on input_data/target_col, not on threshold_ratio.
+        self._last_eval_input: Optional[pd.DataFrame] = None
+        self._last_eval_target: Optional[pd.Series] = None
+        self._test_reconstruction: Optional[_Reconstruction] = None
+
+        # Optional {(id(ae_model), id(frame)): (frame, reconstruction)} store shared
+        # between pipelines that reuse one autoencoder (set by SegmentAE_Optimizer).
+        self._reconstruction_cache: Optional[Dict[Tuple[int, int], Tuple[Any, np.ndarray]]] = None
+
+        # Results storage (dictionaries keyed by cluster id)
+        self.preds_train: Dict[Any, Dict] = {}
+        self.preds_test: Dict[Any, Dict] = {}
+        self.preds_final: Dict[Any, Dict] = {}
+        self.reconstruction_eval: Dict[Any, Dict] = {}
+        self.reconstruction_test: Dict[Any, Dict] = {}
+        self.reconstruction_final: Dict[Any, Dict] = {}
+        self.results: Dict = {}
 
     def reconstruction(
         self,
         input_data: pd.DataFrame,
         target_col: Optional[pd.Series] = None,
         threshold_metric: str = "mse",
-    ) -> Union["SegmentAE", tuple]:
+    ) -> "SegmentAE":
         """
         Reconstruct input data and compute reconstruction errors per cluster.
 
         This method segments data by cluster, generates autoencoder reconstructions,
-        and computes reconstruction errors using the specified metric.
+        and computes reconstruction errors using the specified metric. The mean
+        error of each cluster becomes its baseline anomaly threshold.
+
+        Args:
+            input_data: Training (reference) features, already preprocessed.
+            target_col: Optional labels, stored alongside the per-cluster results.
+            threshold_metric: "mse", "mae", "rmse" or "max_error" (or a ``ThresholdMetric``).
+
+        Returns:
+            The fitted pipeline (for chaining).
         """
-        # Validate and configure
         self._validate_reconstruction_input(input_data, target_col)
-        config = ReconstructionConfig(threshold_metric=threshold_metric)
-        self._threshold_metric = config.threshold_metric
-        self._metric_column = get_metric_column_name(self._threshold_metric)
+        metric = ReconstructionConfig(threshold_metric=threshold_metric).threshold_metric
+        metric_column = get_metric_column_name(metric)
 
-        # Get cluster assignments
-        cluster_predictions = self._get_cluster_predictions(input_data)
+        result = self._reconstruct(input_data, _align_target(input_data, target_col), metric)
 
-        # Process each cluster
-        cluster_results = self._process_all_clusters(
-            input_data=input_data, target_col=target_col, cluster_predictions=cluster_predictions
-        )
+        # Commit the new training reference only once everything succeeded
+        self._threshold_metric = metric
+        self._metric_column = metric_column
+        self._feature_names = list(result.columns)
+        self.preds_train = result.preds
+        self.reconstruction_eval = result.metrics
+        self._base_thresholds = {
+            cluster_id: float(np.mean(cluster["metrics"][metric_column]))
+            for cluster_id, cluster in result.metrics.items()
+        }
+        self._global_threshold = float(np.mean(result.scores))
 
-        # Store results based on phase
-        self._store_reconstruction_results(cluster_results)
+        # A fresh training reference invalidates any earlier test/detection results
+        self._last_eval_input = None
+        self._last_eval_target = None
+        self._test_reconstruction = None
+        self.preds_test, self.reconstruction_test = {}, {}
+        self.preds_final, self.reconstruction_final = {}, {}
+        self.results = {}
 
         self._is_reconstruction_fitted = True
-        return self._return_based_on_phase()
+        return self
 
     def evaluation(
         self, input_data: pd.DataFrame, target_col: pd.Series, threshold_ratio: float = 1.0
@@ -112,31 +180,46 @@ class SegmentAE:
 
         Computes cluster-specific thresholds and evaluates detection performance
         against ground truth labels, providing both global and cluster-level metrics.
+
+        Args:
+            input_data: Test features, with the columns used in ``reconstruction``.
+            target_col: Binary labels (0 = normal, 1 = anomaly). Matched to the
+                rows of ``input_data`` by index label when both carry the same
+                labels, otherwise by position.
+            threshold_ratio: Multiplier applied to each cluster's baseline
+                threshold; higher values flag fewer samples.
+
+        Returns:
+            Dictionary with "global metrics", "clusters metrics",
+            "confusion matrix" and "y_true vs y_pred".
         """
         self._validate_fitted_for_evaluation()
         self._validate_evaluation_input(input_data, target_col)
 
-        config = EvaluationConfig(
-            threshold_ratio=threshold_ratio
-        )  # Threshold Ratio Adjusts the anomaly detection sensitivity relative to baseline threshold
+        ratio = validate_threshold_ratio(threshold_ratio)
+        labels = _align_target(input_data, target_col)
 
-        # Set phase and run reconstruction
-        self._phase = PhaseType.TESTING
-        self.preds_test, self.reconstruction_test = self.reconstruction(
-            input_data=input_data,
-            target_col=target_col,
-            threshold_metric=self._threshold_metric.value,
+        # Reconstruction is independent of threshold_ratio, so reuse the cached test
+        # reconstruction when re-evaluating the same data (e.g. a threshold sweep).
+        cache_hit = (
+            input_data is self._last_eval_input
+            and target_col is self._last_eval_target
+            and self._test_reconstruction is not None
         )
+        if not cache_hit:
+            aligned = validate_columns_match(input_data, self._feature_names, "Input data")
+            result = self._reconstruct(aligned, labels, self._threshold_metric)
+            self._test_reconstruction = result
+            self.preds_test, self.reconstruction_test = result.preds, result.metrics
+            self._last_eval_input = input_data
+            self._last_eval_target = target_col
 
-        # Evaluate each cluster
-        cluster_results = self._evaluate_all_clusters(config.threshold_ratio)
+        result = self._test_reconstruction
+        thresholds = self._resolve_thresholds(result.metrics.keys(), ratio)
+        y_true = labels.to_numpy().astype("int64")
+        y_pred = self._flag_anomalies(result, thresholds)
 
-        # Aggregate global results
-        global_results = self._aggregate_evaluation_results(cluster_results, config.threshold_ratio)
-
-        self.results = global_results
-        self._phase = PhaseType.EVALUATION  # Reset phase
-
+        self.results = self._build_evaluation_results(result, thresholds, y_true, y_pred, ratio)
         return self.results
 
     def detections(self, input_data: pd.DataFrame, threshold_ratio: float = 1.0) -> pd.DataFrame:
@@ -145,289 +228,258 @@ class SegmentAE:
 
         Uses trained cluster-specific thresholds to detect anomalies in new data
         without requiring ground truth labels.
+
+        Returns:
+            DataFrame indexed like ``input_data`` holding the reconstructed
+            feature values plus, for every row:
+
+            - ``Predicted Anomalies``: 1 if the row is flagged, else 0
+            - ``Cluster``: cluster the row was assigned to
+            - ``Reconstruction Error``: the row's anomaly score (threshold metric)
+            - ``Threshold``: threshold the score was compared against
         """
         self._validate_fitted_for_detection()
         self._validate_input(input_data, "Input data")
+        ratio = validate_threshold_ratio(threshold_ratio)
 
-        # Set phase and run reconstruction
-        self._phase = PhaseType.PREDICTION
-        self.reconstruction(
-            input_data=input_data, target_col=None, threshold_metric=self._threshold_metric.value
-        )
+        aligned = validate_columns_match(input_data, self._feature_names, "Input data")
+        result = self._reconstruct(aligned, None, self._threshold_metric)
+        self.preds_final, self.reconstruction_final = result.preds, result.metrics
 
-        # Detect anomalies per cluster
-        predictions = self._detect_anomalies_all_clusters(threshold_ratio)
+        thresholds = self._resolve_thresholds(result.metrics.keys(), ratio)
 
-        self._phase = PhaseType.EVALUATION  # Reset phase
+        predicted, cluster, score, threshold = _OUTPUT_COLUMNS
+        predictions = pd.DataFrame(result.values, columns=result.columns, index=result.index)
+        predictions[predicted] = self._flag_anomalies(result, thresholds)
+        predictions[cluster] = result.labels
+        predictions[score] = result.scores
+        predictions[threshold] = self._row_thresholds(result.labels, thresholds)
         return predictions
 
-    def _process_all_clusters(
-        self,
-        input_data: pd.DataFrame,
-        target_col: Optional[pd.Series],
-        cluster_predictions: pd.DataFrame,
-    ) -> Dict[int, Dict]:
-        """Process reconstruction for all clusters."""
-        cluster_model_name = self.cl_model.cluster_model[0]
-        results = {}
+    def get_thresholds(self, threshold_ratio: float = 1.0) -> Dict[Any, float]:
+        """
+        Return the anomaly threshold of each training cluster for a given ratio.
+        """
+        self._validate_fitted_for_detection()
+        ratio = validate_threshold_ratio(threshold_ratio)
+        return {cluster_id: base * ratio for cluster_id, base in self._base_thresholds.items()}
 
-        for cluster_id in cluster_predictions[cluster_model_name].unique():
-            cluster_data = self._extract_cluster_data(
-                input_data, target_col, cluster_predictions, cluster_model_name, cluster_id
-            )
+    @property
+    def thresholds(self) -> Dict[Any, float]:
+        """Baseline threshold (mean training error) of each cluster, i.e. ratio 1.0."""
+        return dict(self._base_thresholds)
 
-            # Generate reconstructions and compute errors
-            reconstructions = self._reconstruct_cluster(cluster_data["X"])
-            errors = self._compute_cluster_errors(cluster_data["X"], reconstructions)
+    @property
+    def global_threshold(self) -> Optional[float]:
+        """
+        Mean training error over all samples.
 
-            # Store cluster results
-            results[cluster_id] = {
+        Used as the fallback baseline for samples assigned to a cluster that had
+        no training samples. None before ``reconstruction``.
+        """
+        return self._global_threshold
+
+    @property
+    def threshold_metric(self) -> Optional[ThresholdMetric]:
+        """Reconstruction metric the thresholds are based on (None before fitting)."""
+        return self._threshold_metric
+
+    def _reconstruct(
+        self, input_data: pd.DataFrame, target_col: Optional[pd.Series], metric: ThresholdMetric
+    ) -> _Reconstruction:
+        """
+        Reconstruct ``input_data`` once and split the results by cluster.
+
+        The autoencoder is called a single time for the whole frame; errors are
+        computed for all rows at once and then grouped by cluster position.
+        """
+        feature_names = self.cl_model.feature_names
+        if feature_names is not None:
+            input_data = validate_columns_match(input_data, feature_names, "Input data")
+
+        labels = self._get_cluster_predictions(input_data).iloc[:, 0].to_numpy()
+        values = self._predict(input_data)
+        real = input_data.to_numpy(dtype="float64")
+        columns = list(input_data.columns)
+
+        mse, mae, rmse, max_err = compute_reconstruction_errors(real, values)
+        scores = {
+            ThresholdMetric.MSE: mse,
+            ThresholdMetric.MAE: mae,
+            ThresholdMetric.RMSE: rmse,
+            ThresholdMetric.MAX_ERROR: max_err,
+        }[metric]
+
+        preds: Dict[Any, Dict] = {}
+        metrics: Dict[Any, Dict] = {}
+        for label in np.unique(labels):
+            cluster_id = _as_python(label)
+            positions = np.flatnonzero(labels == label)
+            index_labels = input_data.index[positions].tolist()
+
+            metrics[cluster_id] = {
                 "cluster": cluster_id,
-                "real": cluster_data["X"],
-                "y_true": cluster_data["y"],
-                "predictions": reconstructions,
-                "indexs": cluster_data["indices"],
-                "errors": errors,
+                "metrics": create_metrics_dataframe(
+                    mse[positions], mae[positions], rmse[positions], max_err[positions], metric
+                ),
+                "column_metrics": compute_column_metrics(
+                    real[positions], values[positions], columns, cluster_id
+                ),
+                "indexs": index_labels,
+                "positions": positions,
+            }
+            preds[cluster_id] = {
+                "cluster": cluster_id,
+                "real": input_data.iloc[positions],
+                "y_true": target_col.iloc[positions] if target_col is not None else None,
+                "predictions": pd.DataFrame(values[positions], columns=columns),
+                "indexs": index_labels,
+                "positions": positions,
             }
 
-        return results
+        return _Reconstruction(
+            preds=preds,
+            metrics=metrics,
+            labels=labels,
+            values=values,
+            scores=scores,
+            index=input_data.index,
+            columns=columns,
+        )
 
-    def _extract_cluster_data(
-        self,
-        input_data: pd.DataFrame,
-        target_col: Optional[pd.Series],
-        cluster_predictions: pd.DataFrame,
-        cluster_model_name: str,
-        cluster_id: int,
-    ) -> Dict[str, Any]:
-        """Extract data for a specific cluster."""
-        cluster_indices = cluster_predictions.index[
-            cluster_predictions[cluster_model_name] == cluster_id
-        ].tolist()
+    def _predict(self, input_data: pd.DataFrame) -> np.ndarray:
+        """Generate (and validate) autoencoder reconstructions for a whole frame."""
+        cache = self._reconstruction_cache
+        key = (id(self.ae_model), id(input_data))
+        if cache is not None and key in cache and cache[key][0] is input_data:
+            return cache[key][1]
 
-        X_cluster = input_data.loc[cluster_indices]
-        y_cluster = target_col.loc[cluster_indices] if target_col is not None else None
-
-        return {"X": X_cluster, "y": y_cluster, "indices": cluster_indices}
-
-    def _reconstruct_cluster(self, X_cluster: pd.DataFrame) -> pd.DataFrame:
-        """Generate autoencoder reconstructions for cluster data."""
         try:
-            predictions = self.ae_model.predict(X_cluster)
-            return pd.DataFrame(predictions, columns=X_cluster.columns).astype(float)
+            if _accepts_verbose(self.ae_model.predict):
+                output = self.ae_model.predict(input_data, verbose=0)
+            else:
+                output = self.ae_model.predict(input_data)
+            values = np.asarray(output, dtype="float64")
         except Exception as e:
-            raise AutoencoderError(f"Failed to generate reconstructions: {str(e)}")
+            raise AutoencoderError(f"Failed to generate reconstructions: {str(e)}") from e
 
-    def _compute_cluster_errors(
-        self, real_values: pd.DataFrame, predictions: pd.DataFrame
-    ) -> Dict[str, pd.DataFrame]:
-        """Compute reconstruction errors for cluster."""
-        real_np = real_values.values
-        pred_np = predictions.values
+        if values.ndim == 1 and input_data.shape[1] == 1:
+            values = values.reshape(-1, 1)  # single-feature models may return a flat array
 
-        # Compute per-row errors
-        mse, mae, rmse, max_err = compute_reconstruction_errors(real_np, pred_np)
-        metrics_df = create_metrics_dataframe(mse, mae, rmse, max_err)
-
-        # Compute per-column metrics
-        col_metrics = compute_column_metrics(
-            real_np, pred_np, list(real_values.columns), 0  # cluster_id will be set by caller
-        )
-
-        return {"metrics": metrics_df, "column_metrics": col_metrics}
-
-    def _evaluate_all_clusters(self, threshold_ratio: float) -> list:
-        """Evaluate anomaly detection for all clusters."""
-        cluster_results = []
-
-        for cluster_id in self.reconstruction_eval.keys():
-            if cluster_id not in self.reconstruction_test:
-                print(f"Warning: Cluster {cluster_id} not found in test data")
-                continue
-
-            result = self._evaluate_single_cluster(cluster_id, threshold_ratio)
-            cluster_results.append(result)
-
-        return cluster_results
-
-    def _evaluate_single_cluster(self, cluster_id: int, threshold_ratio: float) -> Dict[str, Any]:
-        """Evaluate a single cluster."""
-        # Compute threshold
-        threshold = self._compute_cluster_threshold(cluster_id, threshold_ratio)
-
-        # Get test data
-        metrics_test = self.reconstruction_test[cluster_id]["metrics"]
-        predictions = self.preds_test[cluster_id]["predictions"].copy()
-        y_test = self.preds_test[cluster_id]["y_true"].reset_index(drop=True)
-        indices = self.preds_test[cluster_id]["indexs"]
-
-        # Classify anomalies
-        predictions["Predicted Anomalies"] = detect_anomalies(
-            metrics_test[self._metric_column], threshold
-        )
-
-        # Compute metrics
-        cm = confusion_matrix(y_test, predictions["Predicted Anomalies"])
-        metrics = metrics_classification(y_test, predictions["Predicted Anomalies"])
-        metrics["N_Cluster"] = cluster_id
-        metrics["Threshold Metric"] = self._threshold_metric.value.upper()
-        metrics["Threshold Value"] = round(threshold, 6)
-
-        return {
-            "cluster_id": cluster_id,
-            "metrics": metrics,
-            "confusion_matrix": cm,
-            "predictions": predictions,
-            "indices": indices,
-            "y_test": y_test,
-        }
-
-    def _compute_cluster_threshold(self, cluster_id: int, threshold_ratio: float) -> float:
-        """Compute reconstruction threshold for a cluster."""
-        rec_errors = self.reconstruction_eval[cluster_id]["metrics"][self._metric_column]
-        threshold = compute_threshold(rec_errors, threshold_ratio)
-        print(f"Cluster {cluster_id} || Reconstruction Threshold: {round(threshold, 5)}")
-
-        # Print empty line after last cluster
-        if cluster_id == len(self.reconstruction_eval) - 1:
-            print("")
-
-        return threshold
-
-    def _detect_anomalies_all_clusters(self, threshold_ratio: float) -> pd.DataFrame:
-        """Detect anomalies across all clusters."""
-        all_predictions = []
-
-        for cluster_id in self.reconstruction_eval.keys():
-            if cluster_id not in self.reconstruction_final:
-                continue
-
-            cluster_preds = self._detect_cluster_anomalies(cluster_id, threshold_ratio)
-            all_predictions.append(cluster_preds)
-
-        # Aggregate and sort by original index
-        if not all_predictions:
-            raise ValidationError("No cluster predictions available")
-
-        final_predictions = pd.concat(all_predictions, ignore_index=True)
-        final_predictions = final_predictions.sort_values(by="_index")
-        final_predictions = final_predictions.reset_index(drop=True)
-
-        return final_predictions.drop("_index", axis=1)
-
-    def _detect_cluster_anomalies(self, cluster_id: int, threshold_ratio: float) -> pd.DataFrame:
-        """Detect anomalies for a single cluster."""
-        # Compute threshold (without printing)
-        rec_errors = self.reconstruction_eval[cluster_id]["metrics"][self._metric_column]
-        threshold = compute_threshold(rec_errors, threshold_ratio)
-
-        # Get predictions
-        recons_metrics = self.reconstruction_final[cluster_id]["metrics"]
-        predictions = self.preds_final[cluster_id]["predictions"].copy()
-        indices = self.preds_final[cluster_id]["indexs"]
-
-        # Detect anomalies
-        predictions["Predicted Anomalies"] = detect_anomalies(
-            recons_metrics[self._metric_column], threshold
-        )
-        predictions["_index"] = indices
-
-        return predictions
-
-    def _aggregate_evaluation_results(
-        self, cluster_results: list, threshold_ratio: float
-    ) -> Dict[str, Any]:
-        """Aggregate cluster evaluation results into global metrics."""
-        # Cluster-level metrics
-        cluster_metrics = pd.concat(
-            [result["metrics"] for result in cluster_results], ignore_index=True
-        )
-
-        # Confusion matrices
-        confusion_matrices = {
-            result["cluster_id"]: {f"CM_{result['cluster_id']}": result["confusion_matrix"]}
-            for result in cluster_results
-        }
-
-        # Global predictions
-        all_predictions = []
-        for result in cluster_results:
-            pred_df = pd.DataFrame(
-                {
-                    "index": result["indices"],
-                    "y_test": result["y_test"],
-                    "Predicted Anomalies": result["predictions"]["Predicted Anomalies"],
-                }
+        if values.shape != input_data.shape:
+            raise AutoencoderError(
+                f"Autoencoder returned reconstructions of shape {values.shape}, expected "
+                f"{input_data.shape} (one row per sample, one column per feature)"
             )
-            all_predictions.append(pred_df)
+        if not np.isfinite(values).all():
+            raise AutoencoderError(
+                "Autoencoder produced non-finite reconstructions (NaN or infinity). "
+                "This usually means training diverged; check the input scaling and "
+                "the learning rate, then retrain the model."
+            )
 
-        ytpred = pd.concat(all_predictions, ignore_index=True)
-        ytpred = ytpred.sort_values(by="index").set_index("index")
-
-        # Global metrics
-        global_metrics = metrics_classification(ytpred["y_test"], ytpred["Predicted Anomalies"])
-        global_metrics["Threshold Metric"] = self._threshold_metric.value.upper()
-        global_metrics["Threshold Ratio"] = threshold_ratio
-
-        return {
-            "global metrics": global_metrics,
-            "clusters metrics": cluster_metrics,
-            "confusion matrix": confusion_matrices,
-            "y_true vs y_pred": ytpred,
-        }
-
-    # Storage and retrieval methods
-
-    def _store_reconstruction_results(self, cluster_results: Dict) -> None:
-        """Store reconstruction results based on current phase."""
-        # Convert cluster results to metrics format
-        metrics_results = {}
-        preds_results = {}
-
-        for cluster_id, result in cluster_results.items():
-            metrics_results[cluster_id] = {
-                "cluster": result["cluster"],
-                "metrics": result["errors"]["metrics"],
-                "column_metrics": result["errors"]["column_metrics"],
-                "indexs": result["indexs"],
-            }
-
-            preds_results[cluster_id] = {
-                "cluster": result["cluster"],
-                "real": result["real"],
-                "y_true": result["y_true"],
-                "predictions": result["predictions"],
-                "indexs": result["indexs"],
-            }
-
-        if self._phase == PhaseType.EVALUATION:
-            self.preds_train = preds_results
-            self.reconstruction_eval = metrics_results
-        elif self._phase == PhaseType.TESTING:
-            self.preds_test = preds_results
-            self.reconstruction_test = metrics_results
-        elif self._phase == PhaseType.PREDICTION:
-            self.preds_final = preds_results
-            self.reconstruction_final = metrics_results
-
-    def _return_based_on_phase(self) -> Union["SegmentAE", tuple]:
-        """Return appropriate results based on phase."""
-        if self._phase == PhaseType.EVALUATION:
-            return self
-        elif self._phase == PhaseType.TESTING:
-            return self.preds_test, self.reconstruction_test
-        elif self._phase == PhaseType.PREDICTION:
-            return self.preds_final, self.reconstruction_final
-
-    # Helper methods
+        if cache is not None:
+            cache[key] = (input_data, values)
+        return values
 
     def _get_cluster_predictions(self, input_data: pd.DataFrame) -> pd.DataFrame:
         """Get cluster assignments for input data."""
         return self.cl_model.cluster_prediction(X=input_data)
 
+    def _resolve_thresholds(self, cluster_ids: Iterable, ratio: float) -> Dict[Any, float]:
+        """
+        Threshold for each cluster present in the data being scored.
+
+        Clusters without a training reference (no training sample was assigned
+        to them) fall back to the global training threshold, so every input row
+        is always scored.
+        """
+        thresholds: Dict[Any, float] = {}
+        unseen = []
+        for cluster_id in cluster_ids:
+            base = self._base_thresholds.get(cluster_id)
+            if base is None:
+                unseen.append(cluster_id)
+                base = self._global_threshold
+            thresholds[cluster_id] = base * ratio
+
+        if unseen:
+            warnings.warn(
+                f"Cluster(s) {unseen} have no training reference (no training sample was "
+                f"assigned to them); their samples are scored with the global training "
+                f"threshold instead of a cluster-specific one.",
+                UserWarning,
+                stacklevel=3,
+            )
+        return thresholds
+
+    @staticmethod
+    def _row_thresholds(labels: np.ndarray, thresholds: Dict[Any, float]) -> np.ndarray:
+        """Threshold applicable to each row, given its cluster label."""
+        unique_labels, inverse = np.unique(labels, return_inverse=True)
+        per_cluster = np.array([thresholds[_as_python(label)] for label in unique_labels])
+        return per_cluster[inverse]
+
+    def _flag_anomalies(self, result: _Reconstruction, thresholds: Dict[Any, float]) -> np.ndarray:
+        """1 for rows whose reconstruction error exceeds their cluster threshold, else 0."""
+        row_thresholds = self._row_thresholds(result.labels, thresholds)
+        return (result.scores > row_thresholds).astype("int64")
+
+    def _build_evaluation_results(
+        self,
+        result: _Reconstruction,
+        thresholds: Dict[Any, float],
+        y_true: np.ndarray,
+        y_pred: np.ndarray,
+        threshold_ratio: float,
+    ) -> Dict[str, Any]:
+        """Compute cluster-level and global evaluation metrics."""
+        metric_name = self._threshold_metric.value.upper()
+        cluster_metrics = []
+        confusion_matrices = {}
+
+        for cluster_id, cluster in result.metrics.items():
+            positions = cluster["positions"]
+            threshold = thresholds[cluster_id]
+            if self.verbose:
+                print(f"Cluster {cluster_id} || Reconstruction Threshold: {round(threshold, 5)}")
+
+            metrics = metrics_classification(y_true[positions], y_pred[positions])
+            metrics["N_Cluster"] = cluster_id
+            metrics["Threshold Metric"] = metric_name
+            metrics["Threshold Value"] = round(threshold, 6)
+            cluster_metrics.append(metrics)
+
+            # labels=[0, 1] keeps the matrix 2x2 even when a cluster holds one class
+            confusion_matrices[cluster_id] = {
+                f"CM_{cluster_id}": confusion_matrix(
+                    y_true[positions], y_pred[positions], labels=[0, 1]
+                )
+            }
+
+        if self.verbose:
+            print("")
+
+        # Global predictions, in the order (and with the index) of the input data
+        index = result.index
+        if index.name is None and not isinstance(index, pd.MultiIndex):
+            index = index.rename("index")
+        ytpred = pd.DataFrame({"y_test": y_true, "Predicted Anomalies": y_pred}, index=index)
+
+        global_metrics = metrics_classification(y_true, y_pred)
+        global_metrics["Threshold Metric"] = metric_name
+        global_metrics["Threshold Ratio"] = threshold_ratio
+
+        return {
+            "global metrics": global_metrics,
+            "clusters metrics": pd.concat(cluster_metrics, ignore_index=True),
+            "confusion matrix": confusion_matrices,
+            "y_true vs y_pred": ytpred,
+        }
+
     def _validate_autoencoder(self, ae_model: Any) -> None:
         """Validate that autoencoder has required interface."""
-        if not hasattr(ae_model, "predict"):
+        if not isinstance(ae_model, AutoencoderProtocol) or not callable(ae_model.predict):
             raise ConfigurationError(
                 "Autoencoder must have a 'predict' method. "
                 "Ensure you're passing a trained Keras model or built-in autoencoder."
@@ -439,7 +491,7 @@ class SegmentAE:
             raise ConfigurationError(
                 "cl_model must be an instance of Clustering", valid_options=["Clustering"]
             )
-        if not cl_model._is_fitted:
+        if not cl_model.is_fitted:
             raise ModelNotFittedError(
                 component="Clustering",
                 message="Clustering model must be fitted before use. "
@@ -451,6 +503,14 @@ class SegmentAE:
     ) -> None:
         """Validate reconstruction inputs."""
         self._validate_input(input_data, "Input data")
+
+        reserved = [str(col) for col in input_data.columns if col in _OUTPUT_COLUMNS]
+        if reserved:
+            raise ValidationError(
+                f"Feature columns {reserved} clash with the columns added to the "
+                f"detection output {list(_OUTPUT_COLUMNS)}",
+                suggestion="Rename these feature columns before fitting",
+            )
 
         if target_col is not None:
             if not isinstance(target_col, pd.Series):
@@ -480,18 +540,11 @@ class SegmentAE:
                 f"input_data length ({len(input_data)})"
             )
 
-    def _validate_input(self, X: pd.DataFrame, context: str = "Input") -> None:
-        """Validate input DataFrame."""
-        if not isinstance(X, pd.DataFrame):
-            raise ValidationError(
-                f"{context} must be a pandas DataFrame, got {type(X).__name__}",
-                suggestion="Convert to DataFrame using pd.DataFrame()",
-            )
+        validate_binary_target(target_col, "target_col")
 
-        if X.empty:
-            raise ValidationError(
-                f"{context} DataFrame is empty", suggestion="Ensure your dataset contains data"
-            )
+    def _validate_input(self, X: pd.DataFrame, context: str = "Input") -> None:
+        """Validate input DataFrame (non-empty, numeric, no missing or infinite values)."""
+        validate_dataframe(X, context, allow_missing=False, require_numeric=True)
 
     def _validate_fitted_for_evaluation(self) -> None:
         """Validate that reconstruction has been performed."""
@@ -520,3 +573,39 @@ class SegmentAE:
             f"clustering={self.cl_model.cluster_model}, "
             f"fitted={self._is_reconstruction_fitted})"
         )
+
+
+def _align_target(input_data: pd.DataFrame, target_col: Optional[pd.Series]) -> Optional[pd.Series]:
+    """
+    Pair each label with its row and return the labels indexed like ``input_data``.
+
+    Labels are matched by index label when the target carries exactly the index
+    labels of the data (in any order), which is how pandas aligns two objects.
+    Otherwise they are paired by position, so a target built from a plain array
+    works with data that has any index.
+    """
+    if target_col is None or target_col.index.equals(input_data.index):
+        return target_col
+
+    same_labels = (
+        input_data.index.is_unique
+        and target_col.index.is_unique
+        and target_col.index.isin(input_data.index).all()
+    )
+    if same_labels:
+        return target_col.loc[input_data.index]
+
+    return pd.Series(target_col.to_numpy(), index=input_data.index, name=target_col.name)
+
+
+def _as_python(value: Any) -> Any:
+    """Convert a NumPy scalar (e.g. a cluster label) to its Python equivalent."""
+    return value.item() if isinstance(value, np.generic) else value
+
+
+def _accepts_verbose(predict: Any) -> bool:
+    """True if ``predict`` declares a ``verbose`` parameter (e.g. Keras models)."""
+    try:
+        return "verbose" in inspect.signature(predict).parameters
+    except (TypeError, ValueError):
+        return False

@@ -1,0 +1,53 @@
+# Internal code review notes not part of the published package
+code_improvements/
+#docs/SegmentAE_Architecture_Final.drawio
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# TensorFlow / Keras training artifacts
+logs/
+*.h5
+*.keras
+*.hdf5
+saved_model/
+checkpoints/
+
+# Generated objects from running the examples (not part of the package)
+best_autoencoder.joblib
+best_autoencoder.meta.json
+fitted_segmentae.pkl
+best_config.json
+examples/best_autoencoder.joblib
+examples/best_autoencoder.meta.json
+examples/fitted_segmentae.pkl
+examples/best_config.json
+
+# Jupyter
+.ipynb_checkpoints/

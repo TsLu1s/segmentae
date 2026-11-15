@@ -1,8 +1,46 @@
-from typing import Optional, Tuple
+from dataclasses import dataclass
+from typing import Callable, Dict, Optional, Tuple
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from ucimlrepo import fetch_ucirepo
+
+from segmentae.core.exceptions import ConfigurationError, ValidationError
+
+
+@dataclass(frozen=True)
+class _DatasetSpec:
+    """Description of a benchmark dataset hosted on the UCI ML Repository."""
+
+    uci_id: int
+    target: str
+    to_binary: Callable[[pd.Series], pd.Series]  # maps raw labels to 0 = normal, 1 = anomaly
+    suggested_split: float
+
+
+# Source: https://archive.ics.uci.edu/dataset/350/default+of+credit+card+clients
+#   Default payments of credit card clients in Taiwan (1 = default).
+# Source: https://archive.ics.uci.edu/dataset/148/statlog+shuttle
+#   9 numerical attributes; ~80% of the data belongs to class 1, treated as
+#   normal, and every other class as an anomaly.
+# Source: https://archive.ics.uci.edu/dataset/372/htru2
+#   R. J. Lyon, B. W. Stappers, S. Cooper, J. M. Brooke, J. D. Knowles,
+#   Fifty Years of Pulsar Candidate Selection: From simple filters to a new
+#   principled real-time classification approach, Monthly Notices of the Royal
+#   Astronomical Society 459 (1), 1104-1123, DOI: 10.1093/mnras/stw656
+_DATASETS: Dict[str, _DatasetSpec] = {
+    "default_credit_card": _DatasetSpec(
+        uci_id=350, target="Y", to_binary=lambda y: y.astype(int), suggested_split=0.75
+    ),
+    "shuttle_148": _DatasetSpec(
+        uci_id=148,
+        target="class",
+        to_binary=lambda y: (y.astype(int) != 1).astype(int),
+        suggested_split=0.75,
+    ),
+    "htru2_dataset": _DatasetSpec(
+        uci_id=372, target="class", to_binary=lambda y: y.astype(int), suggested_split=0.9
+    ),
+}
 
 
 def load_dataset(
@@ -14,156 +52,78 @@ def load_dataset(
     Load and preprocess datasets for anomaly detection tasks.
 
     Provides access to several benchmark anomaly detection datasets including
-    credit card defaults, shuttle data, and pulsar data.
+    credit card defaults, shuttle data, and pulsar data. The dataset is
+    downloaded from the UCI Machine Learning Repository (network access required).
+
+    The training set contains only normal samples; the test set contains the
+    remaining normal samples plus every anomaly, shuffled.
+
+    Args:
+        dataset_selection: "default_credit_card", "shuttle_148" or "htru2_dataset".
+        split_ratio: Fraction of the normal samples placed in the training set
+            (a float between 0 and 1), or their absolute number (an integer).
+        random_state: Seed for the train/test split.
+
+    Returns:
+        Tuple ``(train, test, target)`` with the two DataFrames (index reset)
+        and the name of the binary target column (0 = normal, 1 = anomaly).
     """
-
-    # Handle different dataset selections
-    if dataset_selection == "default_credit_card":
-        return _load_credit_card_dataset(split_ratio, random_state)
-
-    elif dataset_selection == "shuttle_148":
-        return _load_shuttle_dataset(split_ratio, random_state)
-
-    elif dataset_selection == "htru2_dataset":
-        return _load_htru2_dataset(split_ratio, random_state)
-
-    else:
+    if dataset_selection not in _DATASETS:
         raise ValueError(
             f"Unknown dataset: '{dataset_selection}'. "
             f"Available options:  'default_credit_card', 'shuttle_148', 'htru2_dataset'"
         )
 
+    if isinstance(split_ratio, bool) or not isinstance(split_ratio, (int, float)):
+        raise ValidationError(f"split_ratio must be a number, got {type(split_ratio).__name__}")
+    is_fraction = isinstance(split_ratio, float) and 0 < split_ratio < 1
+    is_count = isinstance(split_ratio, int) and split_ratio >= 1
+    if not (is_fraction or is_count):
+        raise ValidationError(
+            f"split_ratio must be a fraction between 0 and 1 (exclusive) or a "
+            f"positive number of training rows, got {split_ratio}",
+            suggestion="Use a value like 0.75",
+        )
 
-def _load_credit_card_dataset(
-    split_ratio: float, random_state: Optional[int]
-) -> Tuple[pd.DataFrame, pd.DataFrame, str]:
-    """Load default of credit card clients dataset."""
-    # Source: https://archive.ics.uci.edu/dataset/350/default+of+credit+card+clients
+    spec = _DATASETS[dataset_selection]
+    data = _fetch_uci_dataset(spec.uci_id)
+    target = spec.target
 
-    """
-    This research aimed at the case of customers' default payments in Taiwan and compares the predictive accuracy of probability of default among six data mining methods.
-    """
+    # Binary target: 0 = normal, 1 = anomaly
+    data[target] = spec.to_binary(data[target])
 
-    # Fetch dataset
-    info = fetch_ucirepo(id=350)
-
-    # Concatenate features and targets
-    data = pd.concat([info.data.features, info.data.targets], axis=1)
-    target = "Y"
-
-    # Cast target values to integer
-    data[target] = data[target].astype(int)
-
-    # Separate normal and fraud instances
-    normal = data[data[target] == 0]
-    fraud = data[data[target] == 1]
-
-    # Split normal instances into training and testing sets
-    train, test = train_test_split(normal, train_size=split_ratio, random_state=random_state)
-
-    # Combine testing set with fraud instances and shuffle
-    test = pd.concat([test, fraud])
-    test = test.sample(frac=1, random_state=42)
-
-    # Reset index
-    train = train.reset_index(drop=True)
-    test = test.reset_index(drop=True)
-
-    # Print information
-    _print_dataset_info(train, test, target, suggested_split=0.75)
-
-    return train, test, target
-
-
-def _load_shuttle_dataset(
-    split_ratio: float, random_state: Optional[int]
-) -> Tuple[pd.DataFrame, pd.DataFrame, str]:
-    """Load Statlog Shuttle dataset."""
-    # Source: https://archive.ics.uci.edu/dataset/148/statlog+shuttle
-
-    """ The shuttle dataset contains 9 attributes all of which are numerical. Approximately 80% of the data belongs to class 1 """
-
-    # Fetch dataset
-    info = fetch_ucirepo(id=148)
-
-    # Concatenate features and targets
-    data = pd.concat(
-        [info.data.features.reset_index(drop=True), info.data.targets.reset_index(drop=True)],
-        axis=1,
-    )
-
-    target = "class"
-
-    # Adjust target values to binary (1=normal, others=anomaly)
-    data[target] = data[target].replace({1: 0, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1, 7: 1})
-    data[target] = data[target].astype(int)
-
-    # Separate normal and anomaly instances
     normal = data[data[target] == 0]
     anomaly = data[data[target] == 1]
 
-    # Split normal instances
     train, test = train_test_split(normal, train_size=split_ratio, random_state=random_state)
 
-    # Combine and shuffle
     test = pd.concat([test, anomaly])
     test = test.sample(frac=1, random_state=42)
 
-    # Reset index
     train = train.reset_index(drop=True)
     test = test.reset_index(drop=True)
 
-    # Print information
-    _print_dataset_info(train, test, target, suggested_split=0.75)
+    _print_dataset_info(train, test, target, suggested_split=spec.suggested_split)
 
     return train, test, target
 
 
-def _load_htru2_dataset(
-    split_ratio: float, random_state: Optional[int]
-) -> Tuple[pd.DataFrame, pd.DataFrame, str]:
-    """Load HTRU2 pulsar dataset."""
-    # Source: https://archive.ics.uci.edu/dataset/372/htru2
+def _fetch_uci_dataset(uci_id: int) -> pd.DataFrame:
+    """Download a UCI dataset and return features and target in one DataFrame."""
+    try:
+        from ucimlrepo import fetch_ucirepo  # imported lazily: only needed for the demos
+    except ImportError as exc:
+        raise ConfigurationError(
+            "Loading the example datasets requires the 'ucimlrepo' package. "
+            "Install it with: pip install ucimlrepo"
+        ) from exc
 
-    """
-    R. J. Lyon, B. W. Stappers, S. Cooper, J. M. Brooke, J. D. Knowles, 
-    Fifty Years of Pulsar Candidate Selection: From simple filters to a new principled real-time classification approach,
-    Monthly Notices of the Royal Astronomical Society 459 (1), 1104-1123, DOI: 10.1093/mnras/stw656
-    """
+    info = fetch_ucirepo(id=uci_id)
 
-    # Fetch dataset
-    info = fetch_ucirepo(id=372)
-
-    # Concatenate features and targets
-    data = pd.concat(
+    return pd.concat(
         [info.data.features.reset_index(drop=True), info.data.targets.reset_index(drop=True)],
         axis=1,
     )
-
-    target = "class"
-
-    # Cast target values to integer
-    data[target] = data[target].astype(int)
-
-    # Separate normal and anomaly instances
-    normal = data[data[target] == 0]
-    anomaly = data[data[target] == 1]
-
-    # Split normal instances
-    train, test = train_test_split(normal, train_size=split_ratio, random_state=random_state)
-
-    # Combine and shuffle
-    test = pd.concat([test, anomaly])
-    test = test.sample(frac=1, random_state=42)
-
-    # Reset index
-    train = train.reset_index(drop=True)
-    test = test.reset_index(drop=True)
-
-    # Print information
-    _print_dataset_info(train, test, target, suggested_split=0.9)
-
-    return train, test, target
 
 
 def _print_dataset_info(
@@ -176,7 +136,6 @@ def _print_dataset_info(
         "Suggested Split_Ratio": suggested_split,
     }
 
-    # Add target distribution
     for key, value in test[target].value_counts().to_dict().items():
         label = "Anomalies [1]" if key == 1 else "Normal [0]"
         info[label] = value
