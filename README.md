@@ -20,7 +20,7 @@
 
 ## Framework Overview
 
-`SegmentAE` is designed to enhance anomaly detection performance through the optimization of reconstruction error by integrating and intersecting clustering methods with tabular autoencoders. Built with enterprise-grade architecture, it provides a versatile, scalable, and robust solution for anomaly detection applications in domains such as financial fraud detection, network security, and industrial monitoring.
+`SegmentAE` is designed to enhance anomaly detection performance through the optimization of reconstruction error by integrating and intersecting clustering methods with tabular autoencoders. Built with enterprise-grade architecture, it provides a versatile, scalable, and robust solution for anomaly detection applications in domains such as financial fraud detection, network security or industrial monitoring.
 
 ### Key Architectural Features (v2.0+)
 
