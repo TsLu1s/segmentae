@@ -1,6 +1,5 @@
 """
 SegmentAE Example: Built-in Autoencoder Models
-==============================================
 
 This example demonstrates the complete SegmentAE workflow with the built-in
 DenseAutoencoder: preprocessing, clustering, training, evaluation over several
