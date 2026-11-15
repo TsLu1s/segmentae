@@ -1,18 +1,25 @@
-from typing import Any, Dict, List, Protocol, Union
+from typing import Any, Dict, Protocol, TypeAlias, Union, runtime_checkable
 
 import numpy as np
 import pandas as pd
 
 # Type aliases for commonly used types
-DataFrame = pd.DataFrame
-Series = pd.Series
-NDArray = np.ndarray
-DictStrAny = Dict[str, Any]
+DataFrame: TypeAlias = pd.DataFrame
+Series: TypeAlias = pd.Series
+NDArray: TypeAlias = np.ndarray
+DictStrAny: TypeAlias = Dict[str, Any]
 
 
+@runtime_checkable
 class AutoencoderProtocol(Protocol):
     """
     Protocol defining the interface for autoencoder models.
+
+    Any object exposing ``predict(X)`` that returns one reconstructed row per
+    input row (same number of features) can be used: the built-in autoencoders,
+    a compiled Keras model, or a custom wrapper around another framework.
+    The protocol is runtime-checkable, so ``isinstance(model, AutoencoderProtocol)``
+    verifies the interface.
     """
 
     def predict(self, X: Union[DataFrame, NDArray]) -> NDArray:
@@ -22,6 +29,7 @@ class AutoencoderProtocol(Protocol):
         ...
 
 
+@runtime_checkable
 class ClusterModelProtocol(Protocol):
     """
     Protocol defining the interface for clustering models.
@@ -41,6 +49,7 @@ class ClusterModelProtocol(Protocol):
         ...
 
 
+@runtime_checkable
 class PreprocessorProtocol(Protocol):
     """
     Protocol defining the interface for preprocessing components.

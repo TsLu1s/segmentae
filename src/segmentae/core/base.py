@@ -1,14 +1,19 @@
 from abc import ABC, abstractmethod
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from segmentae.core.exceptions import ModelNotFittedError, ValidationError
+from segmentae.core.exceptions import ModelNotFittedError
+from segmentae.utils.validation import validate_dataframe
 
 
 class AbstractClusterModel(ABC):
     """
     Abstract base class for all clustering implementations.
+
+    Subclass it and register the class with ``ClusterRegistry.register`` to make
+    a custom algorithm available to ``Clustering`` and ``SegmentAE_Optimizer``.
     """
 
     @abstractmethod
@@ -48,27 +53,24 @@ class AbstractClusterModel(ABC):
         """
         pass
 
+    @classmethod
+    def from_params(
+        cls, n_clusters: int = 3, random_state: int = 0, **options: Any
+    ) -> "AbstractClusterModel":
+        """
+        Build a model from the generic parameters of the ``Clustering`` orchestrator.
+
+        The default implementation forwards ``n_clusters`` and ``random_state``.
+        Override it when a model names its parameters differently or consumes
+        extra ``options`` (e.g. ``covariance_type`` for Gaussian Mixture).
+        """
+        return cls(n_clusters=n_clusters, random_state=random_state)
+
     def _validate_input(self, X: pd.DataFrame, context: str = "Input") -> None:
         """
-        Validate input DataFrame.
+        Validate input DataFrame (non-empty, numeric, no missing or infinite values).
         """
-        if not isinstance(X, pd.DataFrame):
-            raise ValidationError(
-                f"{context} must be a pandas DataFrame, got {type(X).__name__}",
-                suggestion="Convert your data to a pandas DataFrame using pd.DataFrame()",
-            )
-
-        if X.empty:
-            raise ValidationError(
-                f"{context} DataFrame is empty",
-                suggestion="Ensure your dataset contains data before fitting",
-            )
-
-        if X.isnull().any().any():
-            raise ValidationError(
-                f"{context} contains missing values",
-                suggestion="Handle missing values using preprocessing before clustering",
-            )
+        validate_dataframe(X, context, allow_missing=False, require_numeric=True)
 
     def _validate_fitted(self) -> None:
         """

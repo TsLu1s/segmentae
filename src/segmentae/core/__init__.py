@@ -4,10 +4,12 @@ from segmentae.core.constants import (
     ClusterModel,
     EncoderType,
     ImputerType,
+    PerformanceMetric,
     PhaseType,
     ScalerType,
     ThresholdMetric,
     get_metric_column_name,
+    parse_performance_metric,
     parse_threshold_metric,
 )
 from segmentae.core.exceptions import (
@@ -34,12 +36,14 @@ __all__ = [
     "PhaseType",
     "ClusterModel",
     "ThresholdMetric",
+    "PerformanceMetric",
     "EncoderType",
     "ScalerType",
     "ImputerType",
     "METRIC_COLUMN_MAP",
     "get_metric_column_name",
     "parse_threshold_metric",
+    "parse_performance_metric",
     # Exceptions
     "SegmentAEError",
     "ClusteringError",

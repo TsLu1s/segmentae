@@ -1,3 +1,6 @@
+from typing import Optional, Sequence
+
+
 class SegmentAEError(Exception):
     """Base exception class for all SegmentAE errors."""
 
@@ -6,8 +9,8 @@ class SegmentAEError(Exception):
         super().__init__(self.message)
 
 
-class ClusteringError(SegmentAEError):
-    """Exception raised for clustering-related errors."""
+class ClusteringError(SegmentAEError, ValueError):
+    """Exception raised for clustering-related errors (also a ``ValueError``)."""
 
     def __init__(self, message: str):
         super().__init__(f"Clustering Error: {message}")
@@ -20,10 +23,16 @@ class ReconstructionError(SegmentAEError):
         super().__init__(f"Reconstruction Error: {message}")
 
 
-class ValidationError(SegmentAEError):
-    """Exception raised for input validation errors."""
+class ValidationError(SegmentAEError, ValueError):
+    """
+    Exception raised for input validation errors.
 
-    def __init__(self, message: str, suggestion: str = None):
+    Also a ``ValueError``, so invalid inputs can be handled uniformly with the
+    configuration errors raised by the Pydantic models (which are ``ValueError``
+    subclasses too).
+    """
+
+    def __init__(self, message: str, suggestion: Optional[str] = None):
         error_msg = f"Validation Error: {message}"
         if suggestion:
             error_msg += f"\nSuggestion: {suggestion}"
@@ -33,7 +42,7 @@ class ValidationError(SegmentAEError):
 class ModelNotFittedError(SegmentAEError):
     """Exception raised when attempting to use a model before fitting."""
 
-    def __init__(self, message: str = None, component: str = "Model"):
+    def __init__(self, message: Optional[str] = None, component: str = "Model"):
         if message is None:
             message = (
                 f"{component} must be fitted before use. "
@@ -42,10 +51,10 @@ class ModelNotFittedError(SegmentAEError):
         super().__init__(message)
 
 
-class ConfigurationError(SegmentAEError):
-    """Exception raised for invalid configuration parameters."""
+class ConfigurationError(SegmentAEError, ValueError):
+    """Exception raised for invalid configuration parameters (also a ``ValueError``)."""
 
-    def __init__(self, message: str, valid_options: list = None):
+    def __init__(self, message: str, valid_options: Optional[Sequence] = None):
         error_msg = f"Configuration Error: {message}"
         if valid_options:
             options_str = ", ".join(str(opt) for opt in valid_options)

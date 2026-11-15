@@ -1,3 +1,84 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "segmentae"
+dynamic = ["version"]
+description = "SegmentAE: A Python Library for Anomaly Detection Optimization"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Luís Fernando da Silva Santos", email = "luisf_ssantos@hotmail.com" },
+]
+keywords = [
+    "python",
+    "data science",
+    "machine learning",
+    "deep learning",
+    "neural networks",
+    "autoencoder",
+    "clustering",
+    "anomaly detection",
+    "novelty detection",
+    "fraud detection",
+    "data preprocessing",
+]
+classifiers = [
+    "Intended Audience :: Education",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Customer Service",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Healthcare Industry",
+    "Intended Audience :: Telecommunications Industry",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+# Lower bounds are the oldest versions the test suite is run against.
+# Keep in sync with requirements.txt.
+# Atlantic 2.x needs Python 3.11+ (it imports typing.Self) but its published
+# metadata does not say so, hence the explicit split by Python version.
+dependencies = [
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "scikit-learn>=1.4.0",
+    "tensorflow>=2.16.0",
+    "atlantic>=1.1.67,<2.0.0; python_version < '3.11'",
+    "atlantic>=1.1.67; python_version >= '3.11'",
+    "pydantic>=2.0.0,<3.0.0",
+    "matplotlib>=3.7.0",
+    "ucimlrepo>=0.0.7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "pytest-cov>=4.0", "black>=23.0", "isort>=5.0"]
+
+[project.urls]
+Homepage = "https://github.com/TsLu1s/SegmentAE"
+Repository = "https://github.com/TsLu1s/SegmentAE"
+Issues = "https://github.com/TsLu1s/SegmentAE/issues"
+
+[tool.setuptools.dynamic]
+version = { attr = "segmentae._version.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["segmentae"]
+
 [tool.isort]
 profile = "black"
 line_length = 100

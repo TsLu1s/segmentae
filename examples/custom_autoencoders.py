@@ -12,19 +12,14 @@ Features demonstrated:
 - Comprehensive anomaly detection workflow
 """
 
-import warnings
-from sklearn.model_selection import train_test_split
-
 import pandas as pd
 import tensorflow as tf
-from tensorflow.keras.layers import Dense
+from sklearn.model_selection import train_test_split
+from tensorflow.keras.layers import Dense, Input
 from tensorflow.keras.models import Sequential
 
 from segmentae import Clustering, Preprocessing, SegmentAE
 from segmentae.data_sources import load_dataset
-
-warnings.filterwarnings("ignore")
-
 
 ############################################################################################
 ### Data Loading
@@ -36,7 +31,8 @@ train, test, target = load_dataset(
 
 test, future_data = train_test_split(test, train_size=0.75, random_state=5)
 
-# Resetting Index is Required
+# Resetting the index is optional: rows are handled by position and results
+# keep the index of the data they were computed from
 train = train.reset_index(drop=True)
 test = test.reset_index(drop=True)
 future_data = future_data.reset_index(drop=True)
@@ -48,9 +44,12 @@ X_future_data = future_data.drop(columns=[target]).copy()
 ############################################################################################
 ### Preprocessing with Enums
 
+# MinMaxScaler maps the features to [0, 1], the range the sigmoid output layer
+# of the autoencoder below can reconstruct. With "StandardScaler" or
+# "RobustScaler", end the decoder with a linear layer instead.
 pr = Preprocessing(
     encoder="IFrequencyEncoder",  # "LabelEncoder", "OneHotEncoder" || #EncoderType.IFREQUENCY,
-    scaler="StandardScaler",  # "MinMaxScaler", "RobustScaler"  || #ScalerType.MINMAX,
+    scaler="MinMaxScaler",  # "StandardScaler", "RobustScaler"  || #ScalerType.MINMAX,
     imputer=None,  # Optional Imputation
 )
 
@@ -62,13 +61,14 @@ X_future_data = pr.transform(X=X_future_data)
 ############################################################################################
 ### Example: Custom Autoencoder Model
 
-print("Num GPUs Available: ", len(tf.config.experimental.list_physical_devices("GPU")))
+print("Num GPUs Available: ", len(tf.config.list_physical_devices("GPU")))
 print(f"Input shape: {X_train.shape[1]}")
 
 # Define the encoder
 encoder = Sequential(
     [
-        Dense(32, activation="relu", input_shape=(X_train.shape[1],)),
+        Input(shape=(X_train.shape[1],)),
+        Dense(32, activation="relu"),
         Dense(24, activation="relu"),
         Dense(16, activation="relu"),
         Dense(8, activation="relu"),
@@ -78,7 +78,8 @@ encoder = Sequential(
 # Define the decoder
 decoder = Sequential(
     [
-        Dense(16, activation="relu", input_shape=(8,)),
+        Input(shape=(8,)),
+        Dense(16, activation="relu"),
         Dense(24, activation="relu"),
         Dense(32, activation="relu"),
         Dense(X_train.shape[1], activation="sigmoid"),
@@ -98,7 +99,7 @@ autoencoder.fit(X_train, X_train, epochs=50, batch_size=None, validation_split=0
 ### Clustering Implementation
 
 cl_model = Clustering(
-    cluster_model=["KMeans"],  # "KMeans", "MiniBatchKMeans", "GMM", "Agglomerative"
+    cluster_model=["KMeans"],  # "KMeans", "MiniBatchKMeans", "GMM"
     n_clusters=3,
 )
 
@@ -107,6 +108,7 @@ cl_model.clustering_fit(X=X_train)
 ############################################################################################
 ### Autoencoder + Clustering Integration
 
+# Any object with a predict(X) method can be used as the autoencoder
 sg = SegmentAE(ae_model=autoencoder, cl_model=cl_model)
 
 ### Train Reconstruction

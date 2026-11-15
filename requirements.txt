@@ -1,9 +1,9 @@
-pandas>=1.2.0
-numpy>=1.19.5
-atlantic==1.1.67
-tensorflow>=2.10.0
+pandas>=2.0.0
+numpy>=1.24.0
+scikit-learn>=1.4.0
+tensorflow>=2.16.0
+atlantic>=1.1.67,<2.0.0; python_version < '3.11'
+atlantic>=1.1.67; python_version >= '3.11'
+pydantic>=2.0.0,<3.0.0
+matplotlib>=3.7.0
 ucimlrepo>=0.0.7
-scipy>=1.11.4
-pydantic==2.0.0
-matplotlib==3.9.3
-
